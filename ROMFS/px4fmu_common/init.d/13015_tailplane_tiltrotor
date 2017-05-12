@@ -6,11 +6,11 @@
 # @output MAIN1 Motor right
 # @output MAIN2 Motor left
 # @output MAIN3 Motor back
-# @output MAIN4 Tiltservo
-# @output MAIN5 
-# @output MAIN6 
-# @output MAIN7 
-# @output MAIN8 
+# @output MAIN4 Tiltservo (one with signal reverser)
+# @output MAIN5 Aileron Right
+# @output MAIN6 Aileron Left
+# @output MAIN7 Elevator
+# @output MAIN8 Rudder
 
 sh /etc/init.d/rc.vtol_defaults
 
@@ -67,7 +67,10 @@ then
 
     param set CBRK_AIRSPD_CHK 162128
     param set FW_ARSP_MODE 2
-    param set 
+    param set CBRK_GPSFAIL 240024
+    param set CBRK_IO_SAFETY 22027
+    param set CBRK_SUPPLY_CHK 894821
+    param set CBRK_USB_CHK 197848
 
     param set SENS_BOARD_ROT 8
 fi
