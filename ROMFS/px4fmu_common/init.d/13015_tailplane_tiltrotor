@@ -75,7 +75,7 @@ then
     param set SENS_BOARD_ROT 8
 fi
 
-set MIXER vtol_convergence
+set MIXER vtol_tailplane_tilitrotor
 set PWM_OUT 1234
 set PWM_RATE 400
 
