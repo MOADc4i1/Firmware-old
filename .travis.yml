@@ -86,13 +86,13 @@ deploy:
     on:
       tags: true
       all_branches: true
-      repo: PX4/Firmware
+      repo: sylvesterwwx/Firmware
       condition: $BUILD_TARGET = qgc_firmware
 
 addons:
   coverity_scan:
     project:
-      name: PX4/Firmware
+      name: sylvesterwwx/Firmware
     notification_email: ci@px4.io
     build_command: make posix_sitl_default
     branch_pattern: coverity
