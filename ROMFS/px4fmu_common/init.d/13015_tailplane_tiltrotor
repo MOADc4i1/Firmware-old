@@ -7,8 +7,8 @@
 # @output MAIN2 Motor left
 # @output MAIN3 Motor back
 # @output MAIN4 Tiltservo (one with signal reverser)
-# @output MAIN5 Aileron Right
-# @output MAIN6 Aileron Left
+# @output MAIN5 Yaw Tilt Servo (Back Motor)
+# @output MAIN6 Aileron with Y connector
 # @output MAIN7 Elevator
 # @output MAIN8 Rudder
 
