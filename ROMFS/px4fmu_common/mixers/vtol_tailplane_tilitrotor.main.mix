@@ -11,43 +11,27 @@ M: 1
 O:      10000  10000      0 -10000  10000
 S: 1 4      0 -20000  10000 -10000  10000
 
-Aileron mixer (roll + flaperon)
+# Yaw Servo (tilt)
+M: 1
+O:      10000  10000      0 -10000  10000
+S: 0 2  10000  10000      0 -10000  10000
+
+#Aileron
 ---------------------------------
 
-This mixer assumes that the aileron servos are set up correctly mechanically;
-depending on the actual configuration it may be necessary to reverse the scaling
-factors (to reverse the servo movement) and adjust the offset, scaling and
-endpoints to suit.
-
 M: 1
 O:      10000  10000      0 -10000  10000
 S: 1 0  10000  10000      0 -10000  10000
 
-M: 1
-O:      10000  10000      0 -10000  10000
-S: 1 0  10000  10000      0 -10000  10000
-
-Elevator mixer
+#Elevator
 ------------
-Two scalers total (output, roll).
-
-This mixer assumes that the elevator servo is set up correctly mechanically;
-depending on the actual configuration it may be necessary to reverse the scaling
-factors (to reverse the servo movement) and adjust the offset, scaling and
-endpoints to suit.
 
 M: 1
 O:       10000   10000      0 -10000  10000
 S: 1 1  -10000  -10000      0 -10000  10000
 
-Rudder mixer
+# Rudder mixer
 ------------
-Two scalers total (output, yaw).
-
-This mixer assumes that the rudder servo is set up correctly mechanically;
-depending on the actual configuration it may be necessary to reverse the scaling
-factors (to reverse the servo movement) and adjust the offset, scaling and
-endpoints to suit.
 
 M: 1
 O:      10000  10000      0 -10000  10000
