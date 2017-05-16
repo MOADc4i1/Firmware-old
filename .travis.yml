@@ -85,7 +85,7 @@ deploy:
     on:
       tags: true
       all_branches: true
-      repo: sylvesterwwx/Firmware
+      repo: MOADc4i1/Firmware
       condition: $BUILD_TARGET = qgc_firmware
 
 addons:
