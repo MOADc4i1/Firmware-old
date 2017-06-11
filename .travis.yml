@@ -91,7 +91,7 @@ deploy:
 addons:
   coverity_scan:
     project:
-      name: sylvesterwwx/Firmware
+      name: MOADc4i1/Firmware
  #   notification_email: ci@px4.io
     build_command: make posix_sitl_default
     branch_pattern: coverity
