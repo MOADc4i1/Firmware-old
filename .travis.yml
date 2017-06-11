@@ -86,7 +86,7 @@ deploy:
       tags: true
       all_branches: true
       repo: MOADc4i1/Firmware
-      condition: $BUILD_TARGET = qgc_firmware
+    #  condition: $BUILD_TARGET = qgc_firmware
 
 addons:
   coverity_scan:
