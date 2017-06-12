@@ -1,5 +1,7 @@
 ## PX4 Pro Drone Autopilot ##
 
+[![Build Status](https://travis-ci.org/MOADc4i1/Firmware.svg?branch=master)]
+
 This repository holds the [PX4 Pro](http://px4.io) flight control solution for drones, with the main applications located in the [src/modules](https://github.com/PX4/Firmware/tree/master/src/modules) directory. It also contains the PX4 Drone Middleware Platform, which provides drivers and middleware to run drones.
 
   * Official Website: http://px4.io (License: BSD 3-clause, [LICENSE.md](https://github.com/PX4/Firmware/blob/master/LICENSE.md))
