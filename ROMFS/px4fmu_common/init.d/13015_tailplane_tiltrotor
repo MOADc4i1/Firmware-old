@@ -79,4 +79,6 @@ set MIXER vtol_tailplane_tilitrotor
 set PWM_OUT 1234
 set PWM_RATE 400
 
+set MIXER_AUX pass
+
 set MAV_TYPE 21
