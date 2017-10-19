@@ -2,7 +2,7 @@
 #
 # @name Tailplane_tiltrotor with Vectoring
 # @type VTOL Tiltrotor
-# @maintainer Sylvester Wang <sylvesterwwx@gmail.com>
+# @maintainer Aeronautical/Aerospace Development Centre, Singapore Polytechnic
 # @output MAIN1 Motor right
 # @output MAIN2 Motor left
 # @output MAIN3 Motor back
