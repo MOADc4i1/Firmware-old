@@ -11,9 +11,9 @@
 # @output MAIN6 Aileron with Y connector
 # @output MAIN7 Elevator
 # @output MAIN8 Rudder
-# @output AUX1 Aux1 bypass
-# @output AUX2 Aux2 bypass
-# @output AUX3 Aux3 bypass
+# @output AUX1 Aux 1 bypass
+# @output AUX2 Aux 2 bypass
+# @output AUX3 Aux 3 bypass
 # @output AUX4 FLAPS
 
 sh /etc/init.d/rc.vtol_defaults
