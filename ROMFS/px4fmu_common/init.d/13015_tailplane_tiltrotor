@@ -2,7 +2,7 @@
 #
 # @name Tailplane_tiltrotor
 # @type VTOL Tiltrotor
-# @maintainer Sylvester Wang <sylvesterwwx@gmail.com>
+# @maintainer Aeronautical/Aerospace Development Centre, Singapore Polytechnic
 # @output MAIN1 Motor right
 # @output MAIN2 Motor left
 # @output MAIN3 Motor back
@@ -11,6 +11,10 @@
 # @output MAIN6 Aileron with Y connector
 # @output MAIN7 Elevator
 # @output MAIN8 Rudder
+# @output AUX1 Aux1 bypass
+# @output AUX2 Aux2 bypass
+# @output AUX3 Aux3 bypass
+# @output AUX4 FLAPS
 
 sh /etc/init.d/rc.vtol_defaults
 
