@@ -1,6 +1,6 @@
 #!nsh
 #
-# @name Tailplane_tiltrotor with Vectoring
+# @name Twinrock Tricopter with Vectoring
 # @type VTOL Tiltrotor
 # @maintainer Aeronautical/Aerospace Development Centre, Singapore Polytechnic
 # @output MAIN1 Motor right
