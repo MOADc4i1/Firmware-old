@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env python
 ############################################################################
 #
-#   Copyright (C) 2016  Intel Corporation. All rights reserved.
+#   Copyright (c) 2017 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -32,43 +32,37 @@
 #
 ############################################################################
 
-set -e
+#
+# Basic central executable for PX4 maintenance
+#
 
-USER=${AERO_USER:-root}
-HOSTNAME=${AERO_HOSTNAME:-intel-aero.local}
-SCRIPT_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
+# for python2.7 compatibility
+from __future__ import print_function
 
-target=$USER@$HOSTNAME
-firmware=$1
-px_uploader=${SCRIPT_DIR}/px_uploader.py
+import sys
+import argparse
+import binascii
+import serial
+import socket
+import struct
+import json
+import zlib
+import base64
+import time
+import array
+import os
 
-echo "Copying files to Aero board ($target)..."
-scp $firmware $px_uploader $target:
+from sys import platform as _platform
 
-ssh $target /bin/bash <<EOF
-    uname -a
-    /usr/sbin/get_aero_version.py
-    router_running=0
-    if [ -n "\$(fuser /dev/ttyS1)" ]; then
-        router_running=1
-        # try stopping router
-        /etc/init.d/mavlink-routerd.sh stop
-        p=\$(fuser /dev/ttyS1)
-        if [ -n "\$p" ]; then
-            echo "Process \$p is running and keeping UART busy"
-            exit 1
-        fi
-    fi
-    echo -e "Updating firmware on AeroFC"
-    ~/px_uploader.py \
-        --port /dev/ttyS1 \
-        --baud-flightstack 921600,460800,1500000,115200 \
-        $(basename $firmware)
-    echo "Firmware updated"
-    if [ \$router_running -eq 1 ]; then
-        echo "Restarting router"
-        /etc/init.d/mavlink-routerd.sh start
-    fi
-EOF
+# Detect python version
+if sys.version_info[0] < 3:
+    runningPython3 = False
+else:
+    runningPython3 = True
 
-echo "Finished."
+def main():
+
+    print("PX4 release v1.6")
+
+if __name__ == '__main__':
+    main()
