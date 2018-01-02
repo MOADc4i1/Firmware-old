@@ -57,7 +57,6 @@ import sys
 import argparse
 import binascii
 import serial
-import socket
 import struct
 import json
 import zlib
@@ -204,10 +203,9 @@ class uploader(object):
             self.port.close()
 
     def open(self):
-        # upload timeout
         timeout = time.time() + 0.2
 
-        # attempt to open the port while it exists and until timeout occurs
+        # Attempt to open the port while it exists and until timeout occurs
         while self.port is not None:
             portopen = True
             try:
@@ -343,13 +341,13 @@ class uploader(object):
                     uploader.EOC)
 
         # erase is very slow, give it 20s
-        deadline = time.time() + 30.0
+        deadline = time.time() + 20.0
         while time.time() < deadline:
 
             # Draw progress bar (erase usually takes about 9 seconds to complete)
             estimatedTimeRemaining = deadline-time.time()
             if estimatedTimeRemaining >= 9.0:
-                self.__drawProgressBar(label, 30.0-estimatedTimeRemaining, 9.0)
+                self.__drawProgressBar(label, 20.0-estimatedTimeRemaining, 9.0)
             else:
                 self.__drawProgressBar(label, 10.0, 10.0)
                 sys.stdout.write(" (timeout: %d seconds) " % int(deadline-time.time()))
@@ -488,17 +486,8 @@ class uploader(object):
                 print("FORCED WRITE, FLASHING ANYWAY!")
             else:
                 raise IOError(msg)
-
-        # Prevent uploads where the image would overflow the flash
         if self.fw_maxsize < fw.property('image_size'):
             raise RuntimeError("Firmware image is too large for this board")
-
-        # Prevent uploads where the maximum image size of the board config is smaller than the flash
-        # of the board. This is a hint the user chose the wrong config and will lack features
-        # for this particular board.
-        if self.fw_maxsize > fw.property('image_maxsize'):
-            raise RuntimeError("Board can accept larger flash images (%u bytes) than board config (%u bytes). Please use the correct board configuration to avoid lacking critical functionality."
-                % (self.fw_maxsize, fw.property('image_maxsize')))
 
         # OTP added in v4:
         if self.bl_rev > 3:
@@ -615,27 +604,6 @@ def main():
     fw = firmware(args.firmware)
     print("Loaded firmware for %x,%x, size: %d bytes, waiting for the bootloader..." % (fw.property('board_id'), fw.property('board_revision'), fw.property('image_size')))
     print("If the board does not respond within 1-2 seconds, unplug and re-plug the USB connector.")
-
-    # tell any GCS that might be connected to the autopilot to give up
-    # control of the serial port
-
-    # send to localhost and default GCS port
-    ipaddr = '127.0.0.1'
-    portnum = 14550
-
-    # COMMAND_LONG in MAVLink 1
-    heartbeatpacket = bytearray.fromhex('fe097001010000000100020c5103033c8a')
-    commandpacket = bytearray.fromhex('fe210101014c00000000000000000000000000000000000000000000803f00000000f6000000008459')
-
-    # initialize an UDP socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    # send heartbeat to initialize connection and command to free the link
-    s.sendto(heartbeatpacket, (ipaddr, portnum))
-    s.sendto(commandpacket, (ipaddr, portnum))
-
-    # close the socket
-    s.close()
 
     # Spin waiting for a device to show up
     try:
