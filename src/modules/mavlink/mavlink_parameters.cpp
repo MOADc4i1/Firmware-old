@@ -49,7 +49,7 @@
 
 #define HASH_PARAM "_HASH_CHECK"
 
-MavlinkParametersManager::MavlinkParametersManager(Mavlink *mavlink) : MavlinkStream(mavlink),
+MavlinkParametersManager::MavlinkParametersManager(Mavlink *mavlink) :
 	_send_all_index(-1),
 	_uavcan_open_request_list(nullptr),
 	_uavcan_waiting_for_request_response(false),
@@ -57,7 +57,8 @@ MavlinkParametersManager::MavlinkParametersManager(Mavlink *mavlink) : MavlinkSt
 	_rc_param_map_pub(nullptr),
 	_rc_param_map(),
 	_uavcan_parameter_request_pub(nullptr),
-	_uavcan_parameter_value_sub(-1)
+	_uavcan_parameter_value_sub(-1),
+	_mavlink(mavlink)
 {
 }
 MavlinkParametersManager::~MavlinkParametersManager()
@@ -75,12 +76,6 @@ unsigned
 MavlinkParametersManager::get_size()
 {
 	return MAVLINK_MSG_ID_PARAM_VALUE_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
-}
-
-unsigned
-MavlinkParametersManager::get_size_avg()
-{
-	return 0;
 }
 
 void
@@ -254,7 +249,8 @@ MavlinkParametersManager::handle_message(const mavlink_message_t *msg)
 			if (req_read.target_system == mavlink_system.sysid && req_read.target_component < 127 &&
 			    (req_read.target_component != mavlink_system.compid || req_read.target_component == MAV_COMP_ID_ALL)) {
 				// publish set request to UAVCAN driver via uORB.
-				uavcan_parameter_request_s req;
+				uavcan_parameter_request_s req = {};
+				req.timestamp = hrt_absolute_time();
 				req.message_type = msg->msgid;
 				req.node_id = req_read.target_component;
 				req.param_index = req_read.param_index;
@@ -319,15 +315,19 @@ MavlinkParametersManager::handle_message(const mavlink_message_t *msg)
 void
 MavlinkParametersManager::send(const hrt_abstime t)
 {
+	int max_num_to_send;
+
 	if (_mavlink->get_protocol() == SERIAL && !_mavlink->is_usb_uart()) {
-		send_one();
+		max_num_to_send = 3;
 
 	} else {
-		// speed up parameter loading via UDP, TCP or USB: try to send 5 at once
-		int i = 0;
-
-		while (i++ < 5 && send_one());
+		// speed up parameter loading via UDP, TCP or USB: try to send 15 at once
+		max_num_to_send = 5 * 3;
 	}
+
+	int i = 0;
+
+	while (i++ < max_num_to_send && send_one());
 }
 
 
