@@ -86,7 +86,5 @@ set PWM_OUT 1234
 set PWM_RATE 400
 
 set MIXER_AUX vtol_tailplane_tilitrotor_vectoring
-set PWM_AUX_RATE 50
-set PWM_AUX_OUT 1234
 
 set MAV_TYPE 21
