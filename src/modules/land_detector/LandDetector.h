@@ -33,7 +33,7 @@
 
 /**
  * @file LandDetector.h
- * Land detector interface for multicopter, fixedwing and VTOL implementations.
+Land detector interface for multicopter, fixedwing and VTOL implementations.
  *
  * @author Johan Jansen <jnsn.johan@gmail.com>
  * @author Julian Oes <julian@oes.ch>
@@ -43,45 +43,36 @@
 #pragma once
 
 #include <px4_workqueue.h>
-#include <px4_module.h>
 #include <systemlib/hysteresis/hysteresis.h>
 #include <systemlib/param/param.h>
-#include <systemlib/perf_counter.h>
 #include <uORB/uORB.h>
-#include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/vehicle_land_detected.h>
 
 namespace land_detector
 {
 
 
-class LandDetector : public ModuleBase<LandDetector>
+class LandDetector
 {
 public:
 	enum class LandDetectionState {
 		FLYING = 0,
 		LANDED = 1,
 		FREEFALL = 2,
-		GROUND_CONTACT = 3,
-		MAYBE_LANDED = 4
+		GROUND_CONTACT = 3
 	};
 
 	LandDetector();
 	virtual ~LandDetector();
 
-	static int task_spawn(int argc, char *argv[]);
-
-	/** @see ModuleBase */
-	static int custom_command(int argc, char *argv[])
+	/**
+	 * @return true if this task is currently running.
+	 */
+	inline bool is_running() const
 	{
-		return print_usage("unknown command");
+		return _taskIsRunning;
 	}
 
-	/** @see ModuleBase */
-	static int print_usage(const char *reason = nullptr);
-
-	/** @see ModuleBase::print_status() */
-	int print_status() override;
 
 	/**
 	 * @return current state.
@@ -90,6 +81,11 @@ public:
 	{
 		return _state;
 	}
+
+	/**
+	 * Tells the task that it should exit.
+	 */
+	void stop();
 
 	/**
 	 * Get the work queue going.
@@ -107,6 +103,7 @@ protected:
 	 */
 	virtual void _update_topics() = 0;
 
+
 	/**
 	 * Update parameters.
 	 */
@@ -118,19 +115,14 @@ protected:
 	virtual bool _get_landed_state() = 0;
 
 	/**
-	 * @return true if UAV is in almost landed state
-	 */
-	virtual bool _get_maybe_landed_state() { return false; }
-
-	/**
 	 * @return true if UAV is touching ground but not landed
 	 */
-	virtual bool _get_ground_contact_state() { return false; }
+	virtual bool _get_ground_contact_state()  = 0;
 
 	/**
 	 * @return true if UAV is in free-fall state.
 	 */
-	virtual bool _get_freefall_state() { return false; }
+	virtual bool _get_freefall_state() = 0;
 
 	/**
 	 *  @return maximum altitude that can be reached
@@ -147,40 +139,47 @@ protected:
 	/** Run main land detector loop at this rate in Hz. */
 	static constexpr uint32_t LAND_DETECTOR_UPDATE_RATE_HZ = 50;
 
-	orb_advert_t _landDetectedPub{nullptr};
-	vehicle_land_detected_s _landDetected{};
+	/** Time in us that landing conditions have to hold before triggering a land. */
+	static constexpr uint64_t LAND_DETECTOR_TRIGGER_TIME_US = 1500000;
 
-	int _parameterSub{-1};
-	int _armingSub{-1};
+	/** Time in us that ground contact condition have to hold before triggering contact ground */
+	static constexpr uint64_t GROUND_CONTACT_TRIGGER_TIME_US = 1000000;
 
-	LandDetectionState _state{LandDetectionState::LANDED};
+	/** Time interval in us in which wider acceptance thresholds are used after arming. */
+	static constexpr uint64_t LAND_DETECTOR_ARM_PHASE_TIME_US = 2000000;
 
-	systemlib::Hysteresis _freefall_hysteresis{false};
-	systemlib::Hysteresis _landed_hysteresis{true};
-	systemlib::Hysteresis _maybe_landed_hysteresis{true};
-	systemlib::Hysteresis _ground_contact_hysteresis{true};
+	orb_advert_t _landDetectedPub;
+	struct vehicle_land_detected_s _landDetected;
 
-	struct actuator_armed_s	_arming {};
+	int _parameterSub;
+
+	LandDetectionState _state;
+
+	systemlib::Hysteresis _freefall_hysteresis;
+	systemlib::Hysteresis _landed_hysteresis;
+	systemlib::Hysteresis _ground_contact_hysteresis;
+
+	float _altitude_max;
 
 private:
 	static void _cycle_trampoline(void *arg);
 
 	void _cycle();
 
-	void _check_params(bool force = false);
+	void _check_params(const bool force);
 
 	void _update_state();
 
-	param_t _p_total_flight_time_high{PARAM_INVALID};
-	param_t _p_total_flight_time_low{PARAM_INVALID};
-	uint64_t _total_flight_time{0}; ///< in microseconds
-	hrt_abstime _takeoff_time{0};
+	bool _taskShouldExit;
+	bool _taskIsRunning;
 
-	struct work_s	_work {};
+	param_t _p_total_flight_time_high;
+	param_t _p_total_flight_time_low;
+	uint64_t _total_flight_time; ///< in microseconds
+	hrt_abstime _takeoff_time;
 
-	perf_counter_t	_cycle_perf;
 
-	bool _previous_arming_state{false}; ///< stores the previous _arming.armed state
+	struct work_s	_work;
 };
 
 

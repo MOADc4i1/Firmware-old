@@ -208,33 +208,27 @@ static int io_timer_handler(uint16_t timer_index)
 	return 0;
 }
 
-int io_timer_handler0(int irq, void *context, void *arg)
+int io_timer_handler0(int irq, void *context)
 {
 
 	return io_timer_handler(0);
 }
 
-int io_timer_handler1(int irq, void *context, void *arg)
+int io_timer_handler1(int irq, void *context)
 {
 	return io_timer_handler(1);
 
 }
 
-int io_timer_handler2(int irq, void *context, void *arg)
+int io_timer_handler2(int irq, void *context)
 {
 	return io_timer_handler(2);
 
 }
 
-int io_timer_handler3(int irq, void *context, void *arg)
+int io_timer_handler3(int irq, void *context)
 {
 	return io_timer_handler(3);
-
-}
-
-int io_timer_handler4(int irq, void *context, void *arg)
-{
-	return io_timer_handler(4);
 
 }
 
@@ -457,7 +451,7 @@ static int timer_set_rate(unsigned timer, unsigned rate)
 {
 
 	/* configure the timer to update at the desired rate */
-	rARR(timer) = (BOARD_PWM_FREQ / rate) - 1;
+	rARR(timer) = BOARD_PWM_FREQ / rate;
 
 	/* generate an update event; reloads the counter and all registers */
 	rEGR(timer) = GTIM_EGR_UG;
@@ -508,7 +502,7 @@ void io_timer_trigger(void)
 			}
 		}
 
-		/* Now do them all with the shortest delay in between */
+		/* Now do them all wit the shortest delay in between */
 
 		irqstate_t flags = px4_enter_critical_section();
 
@@ -572,7 +566,7 @@ int io_timer_init_timer(unsigned timer)
 		 * and active but DEIR bits are not set.
 		 */
 
-		irq_attach(io_timers[timer].vectorno, io_timers[timer].handler, NULL);
+		irq_attach(io_timers[timer].vectorno, io_timers[timer].handler);
 
 		up_enable_irq(io_timers[timer].vectorno);
 
@@ -650,6 +644,7 @@ int io_timer_channel_init(unsigned channel, io_timer_channel_mode_t mode,
 
 	switch (mode) {
 
+	// intentional fallthrough
 	case IOTimerChanMode_OneShot:
 	case IOTimerChanMode_PWMOut:
 	case IOTimerChanMode_Trigger:

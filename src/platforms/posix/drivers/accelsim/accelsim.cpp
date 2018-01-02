@@ -564,6 +564,9 @@ ACCELSIM::devIOCTL(unsigned long cmd, unsigned long arg)
 			return OK;
 		}
 
+	case SENSORIOCGQUEUEDEPTH:
+		return _accel_reports->size();
+
 	case SENSORIOCRESET:
 		// Nothing to do for simulator
 		return OK;
@@ -574,6 +577,10 @@ ACCELSIM::devIOCTL(unsigned long cmd, unsigned long arg)
 
 	case ACCELIOCGSAMPLERATE:
 		return _accel_samplerate;
+
+	case ACCELIOCSLOWPASS: {
+			return accel_set_driver_lowpass_filter((float)_accel_samplerate, (float)ul_arg);
+		}
 
 	case ACCELIOCSSCALE: {
 			/* copy scale, but only if off by a few percent */
@@ -684,6 +691,9 @@ ACCELSIM::mag_ioctl(unsigned long cmd, unsigned long arg)
 			return OK;
 		}
 
+	case SENSORIOCGQUEUEDEPTH:
+		return _mag_reports->size();
+
 	case SENSORIOCRESET:
 		// Nothing to do for simulator
 		return OK;
@@ -694,6 +704,11 @@ ACCELSIM::mag_ioctl(unsigned long cmd, unsigned long arg)
 
 	case MAGIOCGSAMPLERATE:
 		return _mag_samplerate;
+
+	case MAGIOCSLOWPASS:
+	case MAGIOCGLOWPASS:
+		/* not supported, no internal filtering */
+		return -EINVAL;
 
 	case MAGIOCSSCALE:
 		/* copy scale in */
@@ -866,6 +881,9 @@ ACCELSIM::_measure()
 
 	_accel_reports->force(&accel_report);
 
+	/* notify anyone waiting for data */
+	DevMgr::updateNotify(*this);
+
 	if (!(m_pub_blocked)) {
 		/* publish it */
 
@@ -897,7 +915,8 @@ ACCELSIM::mag_measure()
 	} raw_mag_report;
 #pragma pack(pop)
 
-	mag_report mag_report = {};
+	mag_report mag_report;
+	memset(&mag_report, 0, sizeof(mag_report));
 
 	/* start the performance counter */
 	perf_begin(_mag_sample_perf);
@@ -927,7 +946,6 @@ ACCELSIM::mag_measure()
 
 
 	mag_report.timestamp = hrt_absolute_time();
-	mag_report.is_external = false;
 
 	mag_report.x_raw = (int16_t)(raw_mag_report.x / _mag_range_scale);
 	mag_report.y_raw = (int16_t)(raw_mag_report.y / _mag_range_scale);
@@ -951,6 +969,9 @@ ACCELSIM::mag_measure()
 	mag_report.z = raw_mag_report.z;
 
 	_mag_reports->force(&mag_report);
+
+	/* notify anyone waiting for data */
+	DevMgr::updateNotify(*this);
 
 	if (!(m_pub_blocked)) {
 		/* publish it */
@@ -1153,7 +1174,7 @@ accelsim_main(int argc, char *argv[])
 		}
 	}
 
-	if (myoptind >= argc) {
+	if (argc <= 1) {
 		accelsim::usage();
 		return 1;
 	}

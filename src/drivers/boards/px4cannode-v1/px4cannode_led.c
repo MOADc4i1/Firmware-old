@@ -158,7 +158,7 @@ __EXPORT void board_autoled_off(int led)
 	case LED_STACKCREATED:
 		phy_set_led(BOARD_LED_GREEN, false);
 
-	/* FALLTHROUGH */
+	// no break
 
 	case LED_INIRQ:
 	case LED_SIGNAL:

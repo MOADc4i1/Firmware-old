@@ -36,8 +36,6 @@
  * @author Mark Charlebois <charlebm@gmail.com>
  */
 
-#pragma once
-
 __BEGIN_DECLS
 // The commands to run are specified in a target file: commands_<target>.c
 extern const char *get_commands(void);

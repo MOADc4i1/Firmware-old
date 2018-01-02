@@ -43,7 +43,6 @@
 
 #include <px4_config.h>
 #include <px4_defines.h>
-#include <px4_getopt.h>
 
 #include <drivers/device/i2c.h>
 
@@ -90,8 +89,7 @@
 class SF1XX : public device::I2C
 {
 public:
-	SF1XX(uint8_t rotation = distance_sensor_s::ROTATION_DOWNWARD_FACING, int bus = SF1XX_BUS,
-	      int address = SF1XX_BASEADDR);
+	SF1XX(int bus = SF1XX_BUS, int address = SF1XX_BASEADDR);
 	virtual ~SF1XX();
 
 	virtual int 		init();
@@ -108,7 +106,6 @@ protected:
 	virtual int			probe();
 
 private:
-	uint8_t _rotation;
 	float				_min_distance;
 	float				_max_distance;
 	int                             _conversion_interval;
@@ -181,9 +178,8 @@ private:
  */
 extern "C" __EXPORT int sf1xx_main(int argc, char *argv[]);
 
-SF1XX::SF1XX(uint8_t rotation, int bus, int address) :
+SF1XX::SF1XX(int bus, int address) :
 	I2C("SF1XX", SF1XX_DEVICE_PATH, bus, address, 400000),
-	_rotation(rotation),
 	_min_distance(-1.0f),
 	_max_distance(-1.0f),
 	_conversion_interval(-1),
@@ -264,13 +260,6 @@ SF1XX::init()
 		_conversion_interval = 50000;
 		break;
 
-	case 5:
-		/* SF20/LW20 (100m 48-388Hz) */
-		_min_distance = 0.001f;
-		_max_distance = 100.0f;
-		_conversion_interval = 20834;
-		break;
-
 	default:
 		DEVICE_LOG("invalid HW model %d.", hw_model);
 		return ret;
@@ -284,7 +273,7 @@ SF1XX::init()
 	/* allocate basic report buffers */
 	_reports = new ringbuffer::RingBuffer(2, sizeof(distance_sensor_s));
 
-	set_device_address(SF1XX_BASEADDR);
+	set_address(SF1XX_BASEADDR);
 
 	if (_reports == nullptr) {
 		return ret;
@@ -435,9 +424,24 @@ SF1XX::ioctl(struct file *filp, int cmd, unsigned long arg)
 			return OK;
 		}
 
+	case SENSORIOCGQUEUEDEPTH:
+		return _reports->size();
+
 	case SENSORIOCRESET:
 		/* XXX implement this */
 		return -EINVAL;
+
+	case RANGEFINDERIOCSETMINIUMDISTANCE: {
+			set_minimum_distance(*(float *)arg);
+			return 0;
+		}
+		break;
+
+	case RANGEFINDERIOCSETMAXIUMDISTANCE: {
+			set_maximum_distance(*(float *)arg);
+			return 0;
+		}
+		break;
 
 	default:
 		/* give it to the superclass */
@@ -552,7 +556,7 @@ SF1XX::collect()
 	struct distance_sensor_s report;
 	report.timestamp = hrt_absolute_time();
 	report.type = distance_sensor_s::MAV_DISTANCE_SENSOR_LASER;
-	report.orientation = _rotation;
+	report.orientation = 8;
 	report.current_distance = distance_m;
 	report.min_distance = get_minimum_distance();
 	report.max_distance = get_maximum_distance();
@@ -640,7 +644,7 @@ namespace sf1xx
 
 SF1XX	*g_dev;
 
-void	start(uint8_t rotation);
+void	start();
 void	stop();
 void	test();
 void	reset();
@@ -650,7 +654,7 @@ void	info();
  * Start the driver.
  */
 void
-start(uint8_t rotation)
+start()
 {
 	int fd = -1;
 
@@ -659,7 +663,7 @@ start(uint8_t rotation)
 	}
 
 	/* create the driver */
-	g_dev = new SF1XX(rotation, SF1XX_BUS);
+	g_dev = new SF1XX(SF1XX_BUS);
 
 	if (g_dev == nullptr) {
 		goto fail;
@@ -825,57 +829,38 @@ info()
 int
 sf1xx_main(int argc, char *argv[])
 {
-	// check for optional arguments
-	int ch;
-	int myoptind = 1;
-	const char *myoptarg = NULL;
-	uint8_t rotation = distance_sensor_s::ROTATION_DOWNWARD_FACING;
-
-
-	while ((ch = px4_getopt(argc, argv, "R:", &myoptind, &myoptarg)) != EOF) {
-		switch (ch) {
-		case 'R':
-			rotation = (uint8_t)atoi(myoptarg);
-			PX4_INFO("Setting distance sensor orientation to %d", (int)rotation);
-			break;
-
-		default:
-			PX4_WARN("Unknown option!");
-		}
-	}
-
 	/*
 	 * Start/load the driver.
 	 */
-	if (!strcmp(argv[myoptind], "start")) {
-		sf1xx::start(rotation);
+	if (!strcmp(argv[1], "start")) {
+		sf1xx::start();
 	}
 
 	/*
 	 * Stop the driver
 	 */
-	if (!strcmp(argv[myoptind], "stop")) {
+	if (!strcmp(argv[1], "stop")) {
 		sf1xx::stop();
 	}
 
 	/*
 	 * Test the driver/device.
 	 */
-	if (!strcmp(argv[myoptind], "test")) {
+	if (!strcmp(argv[1], "test")) {
 		sf1xx::test();
 	}
 
 	/*
 	 * Reset the driver.
 	 */
-	if (!strcmp(argv[myoptind], "reset")) {
+	if (!strcmp(argv[1], "reset")) {
 		sf1xx::reset();
 	}
 
 	/*
 	 * Print driver information.
 	 */
-	if (!strcmp(argv[myoptind], "info") || !strcmp(argv[myoptind], "status")) {
+	if (!strcmp(argv[1], "info") || !strcmp(argv[1], "status")) {
 		sf1xx::info();
 	}
 

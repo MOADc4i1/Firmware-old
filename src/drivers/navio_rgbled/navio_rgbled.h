@@ -32,12 +32,16 @@
  ****************************************************************************/
 #pragma once
 
-#include <drivers/linux_gpio/linux_gpio.h>
-#include <DevObj.hpp>
+#include "DevObj.hpp"
+
+#include "navio_gpio.h"
 
 #include <lib/led/led.h>
 
-class RGBLED : public DriverFramework::DevObj
+
+using namespace navio_gpio;
+
+class RGBLED : public DevObj
 {
 public:
 	RGBLED(const char *name);
@@ -51,7 +55,5 @@ protected:
 
 private:
 	LedController _led_controller;
-	LinuxGPIO _gpioR;
-	LinuxGPIO _gpioG;
-	LinuxGPIO _gpioB;
+	Gpio _gpio;
 };

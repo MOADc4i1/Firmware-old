@@ -39,8 +39,6 @@
  * Parameters definition for position_estimator_inav
  */
 
-#pragma once
-
 #include <systemlib/param/param.h>
 
 struct position_estimator_inav_params {

@@ -41,6 +41,7 @@
 
 #define MOUNTPOINT PX4_ROOTFSDIR "/fs/microsd"
 
+static const char *kSDRoot     = MOUNTPOINT "/";
 static const char *kLogRoot    = MOUNTPOINT "/log";
 static const char *kLogData    = MOUNTPOINT "/logdata.txt";
 static const char *kTmpData    = MOUNTPOINT "/$log$.txt";
@@ -79,9 +80,16 @@ stat_file(const char *file, time_t *date = nullptr, uint32_t *size = nullptr)
 }
 
 //-------------------------------------------------------------------
+MavlinkLogHandler *
+MavlinkLogHandler::new_instance(Mavlink *mavlink)
+{
+	return new MavlinkLogHandler(mavlink);
+}
+
+//-------------------------------------------------------------------
 MavlinkLogHandler::MavlinkLogHandler(Mavlink *mavlink)
-	: _pLogHandlerHelper(nullptr),
-	  _mavlink(mavlink)
+	: MavlinkStream(mavlink)
+	, _pLogHandlerHelper(nullptr)
 {
 
 }
@@ -110,6 +118,20 @@ MavlinkLogHandler::handle_message(const mavlink_message_t *msg)
 }
 
 //-------------------------------------------------------------------
+const char *
+MavlinkLogHandler::get_name() const
+{
+	return "MAVLINK_LOG_HANDLER";
+}
+
+//-------------------------------------------------------------------
+uint16_t
+MavlinkLogHandler::get_id()
+{
+	return MAVLINK_MSG_ID_LOG_ENTRY;
+}
+
+//-------------------------------------------------------------------
 unsigned
 MavlinkLogHandler::get_size()
 {
@@ -132,7 +154,7 @@ void
 MavlinkLogHandler::send(const hrt_abstime /*t*/)
 {
 	//-- An arbitrary count of max bytes in one go (one of the two below but never both)
-#define MAX_BYTES_SEND 256 * 1024
+#define MAX_BYTES_SEND 64 * 1024
 	size_t count = 0;
 
 	//-- Log Entries
@@ -258,6 +280,27 @@ MavlinkLogHandler::_log_request_erase(const mavlink_message_t * /*msg*/)
 
 	//-- Delete all logs
 	LogListHelper::delete_all(kLogRoot);
+	//-- Now delete all "msgs_*" from root
+	DIR *dp = opendir(kSDRoot);
+
+	if (dp) {
+		struct dirent *result = nullptr;
+
+		while ((result = readdir(dp))) {
+			if (result->d_type == PX4LOG_REGULAR_FILE) {
+				if (!memcmp(result->d_name, "msgs_", 5)) {
+					char msg_path[128];
+					snprintf(msg_path, sizeof(msg_path), "%s%s", kSDRoot, result->d_name);
+
+					if (unlink(msg_path)) {
+						PX4LOG_WARN("MavlinkLogHandler::_log_request_erase Error deleting %s\n", msg_path);
+					}
+				}
+			}
+		}
+
+		closedir(dp);
+	}
 }
 
 //-------------------------------------------------------------------
@@ -429,7 +472,6 @@ LogListHelper::get_log_data(uint8_t len, uint8_t *buffer)
 
 	if (offset && fseek(current_log_filep, offset, SEEK_CUR)) {
 		fclose(current_log_filep);
-		current_log_filep = nullptr;
 		PX4LOG_WARN("MavlinkLogHandler::get_log_data Seek error in %s\n", current_log_filename);
 		return 0;
 	}
@@ -476,13 +518,10 @@ LogListHelper::_init()
 		if (result->d_type == PX4LOG_DIRECTORY) {
 			time_t tt = 0;
 			char log_path[128];
-			int ret = snprintf(log_path, sizeof(log_path), "%s/%s", kLogRoot, result->d_name);
-			bool path_is_ok = (ret > 0) && (ret < sizeof(log_path));
+			snprintf(log_path, sizeof(log_path), "%s/%s", kLogRoot, result->d_name);
 
-			if (path_is_ok) {
-				if (_get_session_date(log_path, result->d_name, tt)) {
-					_scan_logs(f, log_path, tt);
-				}
+			if (_get_session_date(log_path, result->d_name, tt)) {
+				_scan_logs(f, log_path, tt);
 			}
 		}
 	}
@@ -538,15 +577,12 @@ LogListHelper::_scan_logs(FILE *f, const char *dir, time_t &date)
 				time_t  ldate = date;
 				uint32_t size = 0;
 				char log_file_path[128];
-				int ret = snprintf(log_file_path, sizeof(log_file_path), "%s/%s", dir, result->d_name);
-				bool path_is_ok = (ret > 0) && (ret < sizeof(log_file_path));
+				snprintf(log_file_path, sizeof(log_file_path), "%s/%s", dir, result->d_name);
 
-				if (path_is_ok) {
-					if (_get_log_time_size(log_file_path, result->d_name, ldate, size)) {
-						//-- Write result->out to list file
-						fprintf(f, "%u %u %s\n", (unsigned)ldate, (unsigned)size, log_file_path);
-						log_count++;
-					}
+				if (_get_log_time_size(log_file_path, result->d_name, ldate, size)) {
+					//-- Write result->out to list file
+					fprintf(f, "%u %u %s\n", (unsigned)ldate, (unsigned)size, log_file_path);
+					log_count++;
 				}
 			}
 		}
@@ -608,27 +644,20 @@ LogListHelper::delete_all(const char *dir)
 
 		if (result->d_type == PX4LOG_DIRECTORY && result->d_name[0] != '.') {
 			char log_path[128];
-			int ret = snprintf(log_path, sizeof(log_path), "%s/%s", dir, result->d_name);
-			bool path_is_ok = (ret > 0) && (ret < sizeof(log_path));
+			snprintf(log_path, sizeof(log_path), "%s/%s", dir, result->d_name);
+			LogListHelper::delete_all(log_path);
 
-			if (path_is_ok) {
-				LogListHelper::delete_all(log_path);
-
-				if (rmdir(log_path)) {
-					PX4LOG_WARN("MavlinkLogHandler::delete_all Error removing %s\n", log_path);
-				}
+			if (rmdir(log_path)) {
+				PX4LOG_WARN("MavlinkLogHandler::delete_all Error removing %s\n", log_path);
 			}
 		}
 
 		if (result->d_type == PX4LOG_REGULAR_FILE) {
 			char log_path[128];
-			int ret = snprintf(log_path, sizeof(log_path), "%s/%s", dir, result->d_name);
-			bool path_is_ok = (ret > 0) && (ret < sizeof(log_path));
+			snprintf(log_path, sizeof(log_path), "%s/%s", dir, result->d_name);
 
-			if (path_is_ok) {
-				if (unlink(log_path)) {
-					PX4LOG_WARN("MavlinkLogHandler::delete_all Error deleting %s\n", log_path);
-				}
+			if (unlink(log_path)) {
+				PX4LOG_WARN("MavlinkLogHandler::delete_all Error deleting %s\n", log_path);
 			}
 		}
 	}

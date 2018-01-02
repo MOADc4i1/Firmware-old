@@ -85,14 +85,9 @@ public:
 	 *
 	 * @param voltage_v: current voltage in V
 	 * @param current_a: current current in A
-	 * @param connected: Battery is connected
-	 * @param selected_source: This battery is on the brick that the selected source for selected_source
-	 * @param priority: The brick number -1. The term priority refers to the Vn connection on the LTC4417
 	 * @param throttle_normalized: throttle from 0 to 1
 	 */
-	void updateBatteryStatus(hrt_abstime timestamp, float voltage_v, float current_a,
-				 bool connected, bool selected_source, int priority,
-				 float throttle_normalized,
+	void updateBatteryStatus(hrt_abstime timestamp, float voltage_v, float current_a, float throttle_normalized,
 				 bool armed, battery_status_s *status);
 
 private:
@@ -100,7 +95,7 @@ private:
 	void filterCurrent(float current_a);
 	void sumDischarged(hrt_abstime timestamp, float current_a);
 	void estimateRemaining(float voltage_v, float current_a, float throttle_normalized, bool armed);
-	void determineWarning(bool connected);
+	void determineWarning();
 	void computeScale();
 
 	control::BlockParamFloat _param_v_empty;

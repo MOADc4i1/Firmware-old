@@ -178,6 +178,9 @@ int DfISL29501Wrapper::_publish(struct range_sensor_data &data)
 		orb_publish(ORB_ID(distance_sensor), _range_topic, &d);
 	}
 
+	/* Notify anyone waiting for data. */
+	DevMgr::updateNotify(*this);
+
 	return 0;
 };
 

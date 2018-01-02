@@ -44,7 +44,6 @@
 //#include <debug.h>
 #include <px4_defines.h>
 #include <px4_posix.h>
-#include <px4_shutdown.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -97,8 +96,15 @@ static bool autosave_disabled = false;
 /**
  * Array of static parameter info.
  */
+#ifdef _UNIT_TEST
+extern struct param_info_s	param_array[];
+extern struct param_info_s	*param_info_base;
+extern struct param_info_s	*param_info_limit;
+#define param_info_count	(param_info_limit - param_info_base)
+#else
 static struct param_info_s *param_info_base = (struct param_info_s *) &px4_parameters;
 #define	param_info_count		px4_parameters.param_count
+#endif /* _UNIT_TEST */
 
 /**
  * Storage for modified parameters.
@@ -946,6 +952,14 @@ param_save_default(void)
 		goto exit;
 	}
 
+	// After writing the file, also do a fsync to prevent loosing params if power is cut.
+	res = fsync(fd);
+
+	if (res != 0) {
+		PX4_ERR("failed to do fsync: %s", strerror(errno));
+		goto exit;
+	}
+
 	PARAM_CLOSE(fd);
 
 
@@ -1037,12 +1051,6 @@ param_export(int fd, bool only_unsaved)
 	struct bson_encoder_s encoder;
 	int	result = -1;
 
-	int shutdown_lock_ret = px4_shutdown_lock();
-
-	if (shutdown_lock_ret) {
-		PX4_ERR("px4_shutdown_lock() failed (%i)", shutdown_lock_ret);
-	}
-
 	param_lock();
 
 	bson_encoder_init_file(&encoder, fd);
@@ -1122,12 +1130,6 @@ param_export(int fd, bool only_unsaved)
 out:
 	param_unlock();
 
-	fsync(fd); // make sure the data is flushed before releasing the shutdown lock
-
-	if (shutdown_lock_ret == 0) {
-		px4_shutdown_unlock();
-	}
-
 	if (result == 0) {
 		result = bson_encoder_fini(&encoder);
 	}
@@ -1175,8 +1177,7 @@ param_import_callback(bson_decoder_t decoder, void *private, bson_node_t node)
 	switch (node->type) {
 	case BSON_INT32:
 		if (param_type(param) != PARAM_TYPE_INT32) {
-			PX4_WARN("unexpected type for %s", node->name);
-			result = 1; // just skip this entry
+			PX4_DEBUG("unexpected type for '%s", node->name);
 			goto out;
 		}
 
@@ -1187,8 +1188,7 @@ param_import_callback(bson_decoder_t decoder, void *private, bson_node_t node)
 
 	case BSON_DOUBLE:
 		if (param_type(param) != PARAM_TYPE_FLOAT) {
-			PX4_WARN("unexpected type for %s", node->name);
-			result = 1; // just skip this entry
+			PX4_DEBUG("unexpected type for '%s", node->name);
 			goto out;
 		}
 
@@ -1199,14 +1199,12 @@ param_import_callback(bson_decoder_t decoder, void *private, bson_node_t node)
 
 	case BSON_BINDATA:
 		if (node->subtype != BSON_BIN_BINARY) {
-			PX4_WARN("unexpected type for %s", node->name);
-			result = 1; // just skip this entry
+			PX4_DEBUG("unexpected subtype for '%s", node->name);
 			goto out;
 		}
 
 		if (bson_decoder_data_pending(decoder) != param_size(param)) {
-			PX4_WARN("bad size for '%s'", node->name);
-			result = 1; // just skip this entry
+			PX4_DEBUG("bad size for '%s'", node->name);
 			goto out;
 		}
 

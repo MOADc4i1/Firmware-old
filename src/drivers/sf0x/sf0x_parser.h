@@ -38,8 +38,6 @@
  * Declarations of parser for the Lightware SF0x laser rangefinder series
  */
 
-#pragma once
-
 enum SF0X_PARSE_STATE {
 	SF0X_PARSE_STATE0_UNSYNC = 0,
 	SF0X_PARSE_STATE1_SYNC,

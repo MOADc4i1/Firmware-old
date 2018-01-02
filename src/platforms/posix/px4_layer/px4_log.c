@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <string.h>
 #include <px4_log.h>
 #ifdef __PX4_POSIX
 #include <execinfo.h>

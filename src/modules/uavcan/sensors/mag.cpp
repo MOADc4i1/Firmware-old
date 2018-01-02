@@ -130,7 +130,9 @@ int UavcanMagnetometerBridge::ioctl(struct file *filp, int cmd, unsigned long ar
 	case MAGIOCGSAMPLERATE:
 	case MAGIOCSRANGE:
 	case MAGIOCGRANGE:
-	case MAGIOCEXSTRAP: {
+	case MAGIOCSLOWPASS:
+	case MAGIOCEXSTRAP:
+	case MAGIOCGLOWPASS: {
 			return -EINVAL;
 		}
 
@@ -140,8 +142,7 @@ int UavcanMagnetometerBridge::ioctl(struct file *filp, int cmd, unsigned long ar
 	}
 }
 
-void UavcanMagnetometerBridge::mag_sub_cb(const
-		uavcan::ReceivedDataStructure<uavcan::equipment::ahrs::MagneticFieldStrength>
+void UavcanMagnetometerBridge::mag_sub_cb(const uavcan::ReceivedDataStructure<uavcan::equipment::ahrs::MagneticFieldStrength>
 		&msg)
 {
 	lock();
@@ -155,7 +156,6 @@ void UavcanMagnetometerBridge::mag_sub_cb(const
 	 */
 	_report.timestamp = hrt_absolute_time();
 	_report.device_id = _device_id.devid;
-	_report.is_external = true;
 
 	_report.x = (msg.magnetic_field_ga[0] - _scale.x_offset) * _scale.x_scale;
 	_report.y = (msg.magnetic_field_ga[1] - _scale.y_offset) * _scale.y_scale;

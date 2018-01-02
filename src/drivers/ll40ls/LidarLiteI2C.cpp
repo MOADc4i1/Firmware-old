@@ -49,9 +49,8 @@
 #include <stdio.h>
 #include <drivers/drv_hrt.h>
 
-LidarLiteI2C::LidarLiteI2C(int bus, const char *path, uint8_t rotation, int address) :
+LidarLiteI2C::LidarLiteI2C(int bus, const char *path, int address) :
 	I2C("LL40LS", path, bus, address, 100000),
-	_rotation(rotation),
 	_work{},
 	_reports(nullptr),
 	_sensor_ok(false),
@@ -68,7 +67,8 @@ LidarLiteI2C::LidarLiteI2C(int bus, const char *path, uint8_t rotation, int addr
 	_acquire_time_usec(0),
 	_pause_measurements(false),
 	_hw_version(0),
-	_sw_version(0)
+	_sw_version(0),
+	_bus(bus)
 {
 	// up the retries since the device misses the first measure attempts
 	_retries = 3;
@@ -220,6 +220,9 @@ int LidarLiteI2C::ioctl(struct file *filp, int cmd, unsigned long arg)
 
 			return OK;
 		}
+
+	case SENSORIOCGQUEUEDEPTH:
+		return _reports->size();
 
 	default: {
 			int result = LidarLite::ioctl(filp, cmd, arg);
@@ -451,7 +454,7 @@ int LidarLiteI2C::collect()
 	report.covariance = 0.0f;
 	/* the sensor is in fact a laser + sonar but there is no enum for this */
 	report.type = distance_sensor_s::MAV_DISTANCE_SENSOR_LASER;
-	report.orientation = _rotation;
+	report.orientation = 8;
 	/* TODO: set proper ID */
 	report.id = 0;
 
@@ -560,9 +563,4 @@ void LidarLiteI2C::print_info()
 	_reports->print_info("report queue");
 	printf("distance: %ucm (0x%04x)\n",
 	       (unsigned)_last_distance, (unsigned)_last_distance);
-}
-
-const char *LidarLiteI2C::get_dev_name()
-{
-	return get_devname();
 }

@@ -39,7 +39,6 @@
 
 #include <px4_config.h>
 #include <px4_defines.h>
-#include <px4_getopt.h>
 
 #include <drivers/device/i2c.h>
 
@@ -101,8 +100,7 @@
 class SRF02 : public device::I2C
 {
 public:
-	SRF02(uint8_t rotation = distance_sensor_s::ROTATION_DOWNWARD_FACING, int bus = SRF02_BUS,
-	      int address = SRF02_BASEADDR);
+	SRF02(int bus = SRF02_BUS, int address = SRF02_BASEADDR);
 	virtual ~SRF02();
 
 	virtual int 		init();
@@ -119,7 +117,6 @@ protected:
 	virtual int			probe();
 
 private:
-	uint8_t _rotation;
 	float				_min_distance;
 	float				_max_distance;
 	work_s				_work;
@@ -198,9 +195,8 @@ private:
  */
 extern "C" __EXPORT int srf02_main(int argc, char *argv[]);
 
-SRF02::SRF02(uint8_t rotation, int bus, int address) :
+SRF02::SRF02(int bus, int address) :
 	I2C("MB12xx", SRF02_DEVICE_PATH, bus, address, 100000),
-	_rotation(rotation),
 	_min_distance(SRF02_MIN_DISTANCE),
 	_max_distance(SRF02_MAX_DISTANCE),
 	_reports(nullptr),
@@ -257,7 +253,7 @@ SRF02::init()
 	_reports = new ringbuffer::RingBuffer(2, sizeof(distance_sensor_s));
 
 	_index_counter = SRF02_BASEADDR;	/* set temp sonar i2c address to base adress */
-	set_device_address(_index_counter);		/* set I2c port to temp sonar i2c adress */
+	set_address(_index_counter);		/* set I2c port to temp sonar i2c adress */
 
 	if (_reports == nullptr) {
 		return ret;
@@ -283,7 +279,7 @@ SRF02::init()
 	   So second iteration it uses i2c address 111, third iteration 110 and so on*/
 	for (unsigned counter = 0; counter <= MB12XX_MAX_RANGEFINDERS; counter++) {
 		_index_counter = SRF02_BASEADDR - counter;	/* set temp sonar i2c address to base adress - counter */
-		set_device_address(_index_counter);			/* set I2c port to temp sonar i2c adress */
+		set_address(_index_counter);			/* set I2c port to temp sonar i2c adress */
 		int ret2 = measure();
 
 		if (ret2 == 0) { /* sonar is present -> store address_index in array */
@@ -294,7 +290,7 @@ SRF02::init()
 	}
 
 	_index_counter = SRF02_BASEADDR;
-	set_device_address(_index_counter); /* set i2c port back to base adress for rest of driver */
+	set_address(_index_counter); /* set i2c port back to base adress for rest of driver */
 
 	/* if only one sonar detected, no special timing is required between firing, so use default */
 	if (addr_ind.size() == 1) {
@@ -438,9 +434,24 @@ SRF02::ioctl(struct file *filp, int cmd, unsigned long arg)
 			return OK;
 		}
 
+	case SENSORIOCGQUEUEDEPTH:
+		return _reports->size();
+
 	case SENSORIOCRESET:
 		/* XXX implement this */
 		return -EINVAL;
+
+	case RANGEFINDERIOCSETMINIUMDISTANCE: {
+			set_minimum_distance(*(float *)arg);
+			return 0;
+		}
+		break;
+
+	case RANGEFINDERIOCSETMAXIUMDISTANCE: {
+			set_maximum_distance(*(float *)arg);
+			return 0;
+		}
+		break;
 
 	default:
 		/* give it to the superclass */
@@ -561,7 +572,7 @@ SRF02::collect()
 	struct distance_sensor_s report;
 	report.timestamp = hrt_absolute_time();
 	report.type = distance_sensor_s::MAV_DISTANCE_SENSOR_ULTRASOUND;
-	report.orientation = _rotation;
+	report.orientation = 8;
 	report.current_distance = distance_m;
 	report.min_distance = get_minimum_distance();
 	report.max_distance = get_maximum_distance();
@@ -636,7 +647,7 @@ SRF02::cycle()
 {
 	if (_collect_phase) {
 		_index_counter = addr_ind[_cycle_counter]; /*sonar from previous iteration collect is now read out */
-		set_device_address(_index_counter);
+		set_address(_index_counter);
 
 		/* perform collection */
 		if (OK != collect()) {
@@ -675,7 +686,7 @@ SRF02::cycle()
 
 	/* ensure sonar i2c adress is still correct */
 	_index_counter = addr_ind[_cycle_counter];
-	set_device_address(_index_counter);
+	set_address(_index_counter);
 
 	/* Perform measurement */
 	if (OK != measure()) {
@@ -711,7 +722,7 @@ namespace srf02
 
 SRF02	*g_dev;
 
-void	start(uint8_t rotation);
+void	start();
 void	stop();
 void	test();
 void	reset();
@@ -721,7 +732,7 @@ void	info();
  * Start the driver.
  */
 void
-start(uint8_t rotation)
+start()
 {
 	int fd;
 
@@ -730,7 +741,7 @@ start(uint8_t rotation)
 	}
 
 	/* create the driver */
-	g_dev = new SRF02(rotation, SRF02_BUS);
+	g_dev = new SRF02(SRF02_BUS);
 
 	if (g_dev == nullptr) {
 		goto fail;
@@ -892,57 +903,38 @@ info()
 int
 srf02_main(int argc, char *argv[])
 {
-	// check for optional arguments
-	int ch;
-	int myoptind = 1;
-	const char *myoptarg = NULL;
-	uint8_t rotation = distance_sensor_s::ROTATION_DOWNWARD_FACING;
-
-
-	while ((ch = px4_getopt(argc, argv, "R:", &myoptind, &myoptarg)) != EOF) {
-		switch (ch) {
-		case 'R':
-			rotation = (uint8_t)atoi(myoptarg);
-			PX4_INFO("Setting distance sensor orientation to %d", (int)rotation);
-			break;
-
-		default:
-			PX4_WARN("Unknown option!");
-		}
-	}
-
 	/*
 	 * Start/load the driver.
 	 */
-	if (!strcmp(argv[myoptind], "start")) {
-		srf02::start(rotation);
+	if (!strcmp(argv[1], "start")) {
+		srf02::start();
 	}
 
 	/*
 	 * Stop the driver
 	 */
-	if (!strcmp(argv[myoptind], "stop")) {
+	if (!strcmp(argv[1], "stop")) {
 		srf02::stop();
 	}
 
 	/*
 	 * Test the driver/device.
 	 */
-	if (!strcmp(argv[myoptind], "test")) {
+	if (!strcmp(argv[1], "test")) {
 		srf02::test();
 	}
 
 	/*
 	 * Reset the driver.
 	 */
-	if (!strcmp(argv[myoptind], "reset")) {
+	if (!strcmp(argv[1], "reset")) {
 		srf02::reset();
 	}
 
 	/*
 	 * Print driver information.
 	 */
-	if (!strcmp(argv[myoptind], "info") || !strcmp(argv[myoptind], "status")) {
+	if (!strcmp(argv[1], "info") || !strcmp(argv[1], "status")) {
 		srf02::info();
 	}
 

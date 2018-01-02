@@ -31,33 +31,38 @@
 #
 ############################################################################
 
-set(SRCS_PLATFORM)
-if (${OS} STREQUAL "nuttx")
-	list(APPEND SRCS_PLATFORM
-		nuttx/cdev_platform.cpp
-	)
-	if ("${CONFIG_I2C}" STREQUAL "y")
-		list(APPEND SRCS_PLATFORM nuttx/I2C.cpp)
-	endif()
+set(SRCS)
 
-	if ("${CONFIG_SPI}" STREQUAL "y")
-		list(APPEND SRCS_PLATFORM nuttx/SPI.cpp)
+list(APPEND SRCS
+	ringbuffer.cpp
+	integrator.cpp
+)
+
+if(${OS} STREQUAL "nuttx")
+	if (NOT ${BOARD} STREQUAL "sim")
+		list(APPEND SRCS
+			device_nuttx.cpp
+			cdev.cpp
+			i2c_nuttx.cpp
+			pio.cpp
+			spi.cpp
+		)
 	endif()
 else()
-	list(APPEND SRCS_PLATFORM
-		posix/I2C.cpp
-		posix/cdev_platform.cpp
-		posix/vfile.cpp
+	list(APPEND SRCS
+		device_posix.cpp
+		vdev.cpp
+		vfile.cpp
+		vdev_posix.cpp
+		i2c_posix.cpp
+		sim.cpp
 	)
 endif()
 
 px4_add_module(
 	MODULE drivers__device
-	SRCS
-		CDev.cpp
-		ringbuffer.cpp
-		integrator.cpp
-		${SRCS_PLATFORM}
+	SRCS ${SRCS}
 	DEPENDS
 		platforms__common
 	)
+# vim: set noet ft=cmake fenc=utf-8 ff=unix : 

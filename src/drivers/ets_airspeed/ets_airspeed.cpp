@@ -42,6 +42,25 @@
 
 #include <drivers/device/i2c.h>
 
+#include <sys/types.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <semaphore.h>
+#include <string.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <errno.h>
+#include <stdio.h>
+#include <math.h>
+#include <unistd.h>
+
+#include <nuttx/arch.h>
+#include <nuttx/wqueue.h>
+#include <nuttx/clock.h>
+
+#include <board_config.h>
+
 #include <systemlib/airspeed.h>
 #include <systemlib/err.h>
 #include <systemlib/param/param.h>
@@ -97,7 +116,7 @@ extern "C" __EXPORT int ets_airspeed_main(int argc, char *argv[]);
 ETSAirspeed::ETSAirspeed(int bus, int address, const char *path) : Airspeed(bus, address,
 			CONVERSION_INTERVAL, path)
 {
-	_device_id.devid_s.devtype = DRV_DIFF_PRESS_DEVTYPE_MS4525;
+
 }
 
 int
@@ -135,12 +154,12 @@ ETSAirspeed::collect()
 		return ret;
 	}
 
-	float diff_pres_pa_raw = (float)(val[1] << 8 | val[0]);
+	uint16_t diff_pres_pa_raw = val[1] << 8 | val[0];
 
 	differential_pressure_s report;
 	report.timestamp = hrt_absolute_time();
 
-	if (diff_pres_pa_raw < FLT_EPSILON) {
+	if (diff_pres_pa_raw == 0) {
 		// a zero value indicates no measurement
 		// since the noise floor has been arbitrarily killed
 		// it defeats our stuck sensor detection - the best we
@@ -152,18 +171,28 @@ ETSAirspeed::collect()
 	// The raw value still should be compensated for the known offset
 	diff_pres_pa_raw -= _diff_pres_offset;
 
+	// Track maximum differential pressure measured (so we can work out top speed).
+	if (diff_pres_pa_raw > _max_differential_pressure_pa) {
+		_max_differential_pressure_pa = diff_pres_pa_raw;
+	}
+
 	report.error_count = perf_event_count(_comms_errors);
 
 	// XXX we may want to smooth out the readings to remove noise.
 	report.differential_pressure_filtered_pa = diff_pres_pa_raw;
 	report.differential_pressure_raw_pa = diff_pres_pa_raw;
 	report.temperature = -1000.0f;
-	report.device_id = _device_id.devid;
+	report.max_differential_pressure_pa = _max_differential_pressure_pa;
 
 	if (_airspeed_pub != nullptr && !(_pub_blocked)) {
 		/* publish it */
 		orb_publish(ORB_ID(differential_pressure), _airspeed_pub, &report);
 	}
+
+	new_report(report);
+
+	/* notify anyone waiting for data */
+	poll_notify(POLLIN);
 
 	ret = OK;
 
@@ -238,11 +267,11 @@ namespace ets_airspeed
 
 ETSAirspeed	*g_dev;
 
-int start(int i2c_bus);
-int stop();
-int test();
-int reset();
-int info();
+void	start(int i2c_bus);
+void	stop();
+void	test();
+void	reset();
+void	info();
 
 /**
  * Start the driver.
@@ -250,14 +279,13 @@ int info();
  * This function only returns if the sensor is up and running
  * or could not be detected successfully.
  */
-int
+void
 start(int i2c_bus)
 {
 	int fd;
 
 	if (g_dev != nullptr) {
-		PX4_ERR("already started");
-		return PX4_ERROR;
+		errx(1, "already started");
 	}
 
 	/* create the driver */
@@ -267,22 +295,22 @@ start(int i2c_bus)
 		goto fail;
 	}
 
-	if (OK != g_dev->init()) {
+	if (OK != g_dev->Airspeed::init()) {
 		goto fail;
 	}
 
 	/* set the poll rate to default, starts automatic data collection */
-	fd = px4_open(AIRSPEED0_DEVICE_PATH, O_RDONLY);
+	fd = open(AIRSPEED0_DEVICE_PATH, O_RDONLY);
 
 	if (fd < 0) {
 		goto fail;
 	}
 
-	if (px4_ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT) < 0) {
+	if (ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT) < 0) {
 		goto fail;
 	}
 
-	return PX4_OK;
+	exit(0);
 
 fail:
 
@@ -291,15 +319,13 @@ fail:
 		g_dev = nullptr;
 	}
 
-	PX4_WARN("not started on bus %d", i2c_bus);
-
-	return PX4_ERROR;
+	errx(1, "no ETS airspeed sensor connected");
 }
 
 /**
  * Stop the driver
  */
-int
+void
 stop()
 {
 	if (g_dev != nullptr) {
@@ -307,11 +333,10 @@ stop()
 		g_dev = nullptr;
 
 	} else {
-		PX4_ERR("driver not running");
-		return PX4_ERROR;
+		errx(1, "driver not running");
 	}
 
-	return PX4_OK;
+	exit(0);
 }
 
 /**
@@ -319,95 +344,103 @@ stop()
  * make sure we can collect data from the sensor in polled
  * and automatic modes.
  */
-int
+void
 test()
 {
 	struct differential_pressure_s report;
 	ssize_t sz;
 	int ret;
 
-	int fd = px4_open(ETS_PATH, O_RDONLY);
+	int fd = open(ETS_PATH, O_RDONLY);
 
 	if (fd < 0) {
-		PX4_ERR("%s open failed (try 'ets_airspeed start' if the driver is not running", ETS_PATH);
-		return PX4_ERROR;
+		err(1, "%s open failed (try 'ets_airspeed start' if the driver is not running", ETS_PATH);
 	}
 
 	/* do a simple demand read */
-	sz = px4_read(fd, &report, sizeof(report));
+	sz = read(fd, &report, sizeof(report));
 
 	if (sz != sizeof(report)) {
-		PX4_ERR("immediate read failed");
-		return PX4_ERROR;
+		err(1, "immediate read failed");
 	}
 
-	PX4_INFO("single read");
-	PX4_INFO("diff pressure: %d pa", (int)report.differential_pressure_filtered_pa);
+	warnx("single read");
+	warnx("diff pressure: %f pa", (double)report.differential_pressure_filtered_pa);
 
 	/* start the sensor polling at 2Hz */
-	if (OK != px4_ioctl(fd, SENSORIOCSPOLLRATE, 2)) {
-		PX4_ERR("failed to set 2Hz poll rate");
-		return PX4_ERROR;
+	if (OK != ioctl(fd, SENSORIOCSPOLLRATE, 2)) {
+		errx(1, "failed to set 2Hz poll rate");
 	}
 
 	/* read the sensor 5x and report each value */
 	for (unsigned i = 0; i < 5; i++) {
-		px4_pollfd_struct_t fds;
+		struct pollfd fds;
 
 		/* wait for data to be ready */
 		fds.fd = fd;
 		fds.events = POLLIN;
-		ret = px4_poll(&fds, 1, 2000);
+		ret = poll(&fds, 1, 2000);
 
 		if (ret != 1) {
-			PX4_ERR("timed out waiting for sensor data");
-			return PX4_ERROR;
+			errx(1, "timed out waiting for sensor data");
 		}
 
 		/* now go get it */
-		sz = px4_read(fd, &report, sizeof(report));
+		sz = read(fd, &report, sizeof(report));
 
 		if (sz != sizeof(report)) {
-			PX4_ERR("periodic read failed");
+			err(1, "periodic read failed");
 		}
 
-		PX4_INFO("periodic read %u", i);
-		PX4_INFO("diff pressure: %f pa", (double)report.differential_pressure_filtered_pa);
+		warnx("periodic read %u", i);
+		warnx("diff pressure: %f pa", (double)report.differential_pressure_filtered_pa);
 	}
 
 	/* reset the sensor polling to its default rate */
-	if (OK != px4_ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT)) {
-		PX4_ERR("failed to set default rate");
-		return PX4_ERROR;
+	if (OK != ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT)) {
+		errx(1, "failed to set default rate");
 	}
 
-	return PX4_OK;
+	errx(0, "PASS");
 }
 
 /**
  * Reset the driver.
  */
-int
+void
 reset()
 {
-	int fd = px4_open(ETS_PATH, O_RDONLY);
+	int fd = open(ETS_PATH, O_RDONLY);
 
 	if (fd < 0) {
-		PX4_ERR("failed");
-		return PX4_ERROR;
+		err(1, "failed ");
 	}
 
-	if (px4_ioctl(fd, SENSORIOCRESET, 0) < 0) {
-		PX4_ERR("driver reset failed");
-		return PX4_ERROR;
+	if (ioctl(fd, SENSORIOCRESET, 0) < 0) {
+		err(1, "driver reset failed");
 	}
 
-	if (px4_ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT) < 0) {
-		PX4_ERR("driver poll restart failed");
-		return PX4_ERROR;
+	if (ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT) < 0) {
+		err(1, "driver poll restart failed");
 	}
 
-	return PX4_OK;
+	exit(0);
+}
+
+/**
+ * Print a little info about the driver.
+ */
+void
+info()
+{
+	if (g_dev == nullptr) {
+		errx(1, "driver not running");
+	}
+
+	printf("state @ %p\n", g_dev);
+	g_dev->print_info();
+
+	exit(0);
 }
 
 } // namespace
@@ -416,11 +449,11 @@ reset()
 static void
 ets_airspeed_usage()
 {
-	PX4_INFO("usage: ets_airspeed command [options]");
-	PX4_INFO("options:");
-	PX4_INFO("\t-b --bus i2cbus (%d)", PX4_I2C_BUS_DEFAULT);
-	PX4_INFO("command:");
-	PX4_INFO("\tstart|stop|reset|test|info");
+	warnx("usage: ets_airspeed command [options]");
+	warnx("options:");
+	warnx("\t-b --bus i2cbus (%d)", PX4_I2C_BUS_DEFAULT);
+	warnx("command:");
+	warnx("\tstart|stop|reset|test|info");
 }
 
 int
@@ -442,31 +475,37 @@ ets_airspeed_main(int argc, char *argv[])
 	 * Start/load the driver.
 	 */
 	if (!strcmp(argv[1], "start")) {
-		return ets_airspeed::start(i2c_bus);
+		ets_airspeed::start(i2c_bus);
 	}
 
 	/*
 	 * Stop the driver
 	 */
 	if (!strcmp(argv[1], "stop")) {
-		return ets_airspeed::stop();
+		ets_airspeed::stop();
 	}
 
 	/*
 	 * Test the driver/device.
 	 */
 	if (!strcmp(argv[1], "test")) {
-		return ets_airspeed::test();
+		ets_airspeed::test();
 	}
 
 	/*
 	 * Reset the driver.
 	 */
 	if (!strcmp(argv[1], "reset")) {
-		return ets_airspeed::reset();
+		ets_airspeed::reset();
+	}
+
+	/*
+	 * Print driver information.
+	 */
+	if (!strcmp(argv[1], "info") || !strcmp(argv[1], "status")) {
+		ets_airspeed::info();
 	}
 
 	ets_airspeed_usage();
-
-	return PX4_OK;
+	exit(0);
 }

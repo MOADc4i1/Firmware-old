@@ -42,7 +42,7 @@
 #include <stdio.h>
 #include <cstdbool>
 #include <v2.0/mavlink_types.h>
-#include <drivers/drv_hrt.h>
+#include "mavlink_stream.h"
 
 class Mavlink;
 
@@ -88,21 +88,21 @@ private:
 };
 
 // MAVLink LOG_* Message Handler
-class MavlinkLogHandler
+class MavlinkLogHandler : public MavlinkStream
 {
 public:
 	MavlinkLogHandler(Mavlink *mavlink);
 
+	static MavlinkLogHandler *new_instance(Mavlink *mavlink);
+
 	// Handle possible LOG message
 	void handle_message(const mavlink_message_t *msg);
 
-	/**
-	 * Handle sending of messages. Call this regularly at a fixed frequency.
-	 * @param t current time
-	 */
-	void send(const hrt_abstime t);
-
-	unsigned get_size();
+	// Overrides from MavlinkStream
+	const char     *get_name(void) const;
+	uint16_t        get_id(void);
+	unsigned        get_size(void);
+	void            send(const hrt_abstime t);
 
 private:
 	void _log_message(const mavlink_message_t *msg);
@@ -114,6 +114,7 @@ private:
 	size_t _log_send_listing();
 	size_t _log_send_data();
 
+private:
 	LogListHelper    *_pLogHandlerHelper;
-	Mavlink *_mavlink;
+
 };

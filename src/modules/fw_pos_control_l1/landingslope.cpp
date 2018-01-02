@@ -37,7 +37,7 @@
  * @author Thomas Gubler <thomasgubler@gmail.com>
  */
 
-#include "Landingslope.hpp"
+#include "landingslope.h"
 
 #include <mathlib/mathlib.h>
 
@@ -47,6 +47,7 @@ Landingslope::update(float landing_slope_angle_rad_new,
 		     float motor_lim_relative_alt_new,
 		     float H1_virt_new)
 {
+
 	_landing_slope_angle_rad = landing_slope_angle_rad_new;
 	_flare_relative_alt = flare_relative_alt_new;
 	_motor_lim_relative_alt = motor_lim_relative_alt_new;
@@ -80,10 +81,9 @@ Landingslope::getLandingSlopeRelativeAltitudeSave(float wp_landing_distance, flo
 	if (fabsf(bearing_airplane_currwp - bearing_lastwp_currwp) < math::radians(90.0f)) {
 		return getLandingSlopeRelativeAltitude(wp_landing_distance);
 
+	} else {
+		return 0.0f;
 	}
-
-	return 0.0f;
-
 }
 
 float
@@ -94,8 +94,7 @@ Landingslope::getFlareCurveRelativeAltitudeSave(float wp_landing_distance, float
 	if (fabsf(bearing_airplane_currwp - bearing_lastwp_currwp) < math::radians(90.0f)) {
 		return _H0 * expf(-math::max(0.0f, _flare_length - wp_landing_distance) / _flare_constant) - _H1_virt;
 
+	} else {
+		return 0.0f;
 	}
-
-	return 0.0f;
-
 }

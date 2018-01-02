@@ -34,8 +34,6 @@
 #include <px4_config.h>
 #include <px4_defines.h>
 
-#include <cstring>
-
 #include <arch/board/board.h>
 
 #include <nuttx/arch.h>
@@ -56,27 +54,6 @@
 // 10Hz
 #define CYCLE_TICKS_DELAY MSEC2TICK(100)
 
-enum AEROFC_ADC_BUS {
-	AEROFC_ADC_BUS_ALL = 0,
-	AEROFC_ADC_BUS_I2C_INTERNAL,
-	AEROFC_ADC_BUS_I2C_EXTERNAL
-};
-
-static struct aerofc_adc_bus_option {
-	enum AEROFC_ADC_BUS busid;
-	uint8_t busnum;
-} bus_options[] = {
-#ifdef PX4_I2C_BUS_EXPANSION
-	{ AEROFC_ADC_BUS_I2C_EXTERNAL, PX4_I2C_BUS_EXPANSION },
-#endif
-#ifdef PX4_I2C_BUS_EXPANSION1
-	{ AEROFC_ADC_BUS_I2C_EXTERNAL, PX4_I2C_BUS_EXPANSION1 },
-#endif
-#ifdef PX4_I2C_BUS_ONBOARD
-	{ AEROFC_ADC_BUS_I2C_INTERNAL, PX4_I2C_BUS_ONBOARD },
-#endif
-};
-
 extern "C" { __EXPORT int aerofc_adc_main(int argc, char *argv[]); }
 
 class AEROFC_ADC : public device::I2C
@@ -96,7 +73,7 @@ private:
 	static void cycle_trampoline(void *arg);
 
 	struct work_s _work;
-	px4_adc_msg_t _sample;
+	adc_msg_s _sample;
 	pthread_mutex_t _sample_mutex;
 };
 
@@ -110,7 +87,7 @@ static void test()
 		err(1, "can't open ADC device");
 	}
 
-	px4_adc_msg_t data[MAX_CHANNEL];
+	adc_msg_s data[MAX_CHANNEL];
 	ssize_t count = read(fd, data, sizeof(data));
 
 	if (count < 0) {
@@ -128,81 +105,35 @@ static void test()
 	exit(0);
 }
 
-static void help()
-{
-	printf("missing command: try 'start' or 'test'\n");
-	printf("options:\n");
-	printf("    -I only internal I2C bus\n");
-	printf("    -X only external I2C bus\n");
-}
-
 int aerofc_adc_main(int argc, char *argv[])
 {
-	int ch;
-	enum AEROFC_ADC_BUS busid = AEROFC_ADC_BUS_ALL;
-
-	while ((ch = getopt(argc, argv, "XI")) != EOF) {
-		switch (ch) {
-		case 'X':
-			busid = AEROFC_ADC_BUS_I2C_EXTERNAL;
-			break;
-
-		case 'I':
-			busid = AEROFC_ADC_BUS_I2C_INTERNAL;
-			break;
-
-		default:
-			help();
-			return -1;
-		}
+	if (argc < 2) {
+		warn("Missing action <start>");
+		return PX4_OK;
 	}
 
-	if (optind >= argc) {
-		help();
-		return PX4_ERROR;
-	}
-
-	const char *verb = argv[optind];
-
-	if (!strcmp(verb, "start")) {
+	if (!strcmp(argv[1], "start")) {
 		if (instance) {
 			warn("AEROFC_ADC was already started");
+		}
+
+		instance = new AEROFC_ADC(PX4_I2C_BUS_EXPANSION);
+
+		if (!instance) {
+			warn("No memory to instance AEROFC_ADC");
 			return PX4_OK;
 		}
 
-		for (uint8_t i = 0; i < (sizeof(bus_options) / sizeof(bus_options[0])); i++) {
-			if (busid != AEROFC_ADC_BUS_ALL && busid != bus_options[i].busid) {
-				continue;
-			}
-
-			instance = new AEROFC_ADC(bus_options[i].busnum);
-
-			if (!instance) {
-				warn("No memory to instance AEROFC_ADC");
-				return PX4_ERROR;
-			}
-
-			if (instance->init() == PX4_OK) {
-				break;
-			}
-
-			warn("AEROFC_ADC not found on busnum=%u", bus_options[i].busnum);
+		if (instance->init() != PX4_OK) {
 			delete instance;
 			instance = nullptr;
 		}
 
-		if (!instance) {
-			warn("AEROFC_ADC not found");
-			return PX4_ERROR;
-		}
-
-	} else if (!strcmp(verb, "test")) {
+	} else if (!strcmp(argv[1], "test")) {
 		test();
 
 	} else {
 		warn("Action not supported");
-		help();
-		return PX4_ERROR;
 	}
 
 	return PX4_OK;
@@ -264,6 +195,7 @@ int AEROFC_ADC::probe()
 	return PX4_OK;
 
 error:
+	warn("AEROFC_ADC not found");
 	return -EIO;
 }
 

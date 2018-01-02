@@ -34,10 +34,12 @@
 
 /**
  * @file nshterm.c
+ * start a nsh terminal on a given port. This can be useful for error
+ * handling in startup scripts to start a nsh shell on /dev/ttyACM0
+ * for diagnostics
  */
 
 #include <px4_config.h>
-#include <px4_module.h>
 #include <termios.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -54,25 +56,12 @@
 
 __EXPORT int nshterm_main(int argc, char *argv[]);
 
-
-static void print_usage(void)
-{
-	PRINT_MODULE_DESCRIPTION("Start an NSH shell on a given port.\n"
-				 "\n"
-				 "This was previously used to start a shell on the USB serial port.\n"
-				 "Now there runs mavlink, and it is possible to use a shell over mavlink.\n"
-				);
-
-	PRINT_MODULE_USAGE_NAME_SIMPLE("nshterm", "command");
-	PRINT_MODULE_USAGE_ARG("<file:dev>", "Device on which to start the shell (eg. /dev/ttyACM0)", false);
-}
-
 int
 nshterm_main(int argc, char *argv[])
 {
 	if (argc < 2) {
-		print_usage();
-		return 1;
+		printf("Usage: nshterm <device>\n");
+		exit(1);
 	}
 
 	unsigned retries = 0;
@@ -101,7 +90,7 @@ nshterm_main(int argc, char *argv[])
 
 			if (armed.armed) {
 				/* this is not an error, but we are done */
-				return 0;
+				exit(0);
 			}
 		}
 
@@ -120,7 +109,7 @@ nshterm_main(int argc, char *argv[])
 
 	if (fd == -1) {
 		perror(argv[1]);
-		return 1;
+		exit(1);
 	}
 
 	/* set up the serial port with output processing */
@@ -157,5 +146,5 @@ nshterm_main(int argc, char *argv[])
 
 	close(fd);
 
-	return 0;
+	return OK;
 }

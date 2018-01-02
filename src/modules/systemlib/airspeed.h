@@ -1,6 +1,7 @@
 /****************************************************************************
  *
- *   Copyright (c) 2012-2013, 2017 PX4 Development Team. All rights reserved.
+ *   Copyright (C) 2012-2013 PX4 Development Team. All rights reserved.
+ *   Author: Lorenz Meier <lm@inf.ethz.ch>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,7 +36,7 @@
  * @file airspeed.h
  * Airspeed estimation declarations
  *
- * @author Lorenz Meier <lorenz@px4.io>
+ * @author Lorenz Meier <lm@inf.ethz.ch>
  *
  */
 
@@ -46,32 +47,6 @@
 #include "conversions.h"
 
 __BEGIN_DECLS
-
-enum AIRSPEED_SENSOR_MODEL {
-	AIRSPEED_SENSOR_MODEL_MEMBRANE = 0,
-	AIRSPEED_SENSOR_MODEL_SDP3X,
-};
-
-enum AIRSPEED_COMPENSATION_MODEL {
-	AIRSPEED_COMPENSATION_MODEL_PITOT = 0,
-	AIRSPEED_COMPENSATION_MODEL_NO_PITOT = 1,
-	AIRSPEED_COMPENSATION_TUBE_PRESSURE_LOSS = 2
-};
-
-/**
- * Calculate indicated airspeed.
- *
- * Note that the indicated airspeed is not the true airspeed because it
- * lacks the air density compensation. Use the calc_true_airspeed functions to get
- * the true airspeed.
- *
- * @param total_pressure pressure inside the pitot/prandtl tube
- * @param static_pressure pressure at the side of the tube/airplane
- * @return indicated airspeed in m/s
- */
-__EXPORT float calc_indicated_airspeed_corrected(enum AIRSPEED_COMPENSATION_MODEL pmodel,
-		enum AIRSPEED_SENSOR_MODEL smodel,
-		float tube_len, float tube_dia_mm, float differential_pressure, float pressure_ambient, float temperature_celsius);
 
 /**
  * Calculate indicated airspeed.

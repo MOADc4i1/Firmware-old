@@ -35,6 +35,7 @@ px4_add_module(
 	MAIN ist8310
 	STACK_MAIN 1200
 	COMPILE_FLAGS
+		-Os
 	SRCS
 		ist8310.cpp
 	DEPENDS

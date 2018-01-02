@@ -162,3 +162,4 @@ HOSTCC			 = gcc
 HOSTINCLUDES		 = -I.
 HOSTCFLAGS		 = -Wall -Wstrict-prototypes -Wshadow -g -pipe
 HOSTLDFLAGS		 =
+

@@ -93,8 +93,6 @@ public:
 	orb_id_t get_topic() const;
 	int get_instance() const;
 
-	int get_fd() { return _fd; }
-
 private:
 	const orb_id_t _topic;		///< topic metadata
 	int _fd;			///< subscription handle

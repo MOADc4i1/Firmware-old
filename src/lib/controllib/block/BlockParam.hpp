@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2012-2017 PX4 Development Team. All rights reserved.
+ *   Copyright (C) 2012 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,26 +32,28 @@
  ****************************************************************************/
 
 /**
- * @file BlockParam.hpp
+ * @file BlockParam.h
  *
  * Controller library code
  */
 
 #pragma once
 
-#include "Block.hpp"
-
-#include <containers/List.hpp>
-#include <px4_defines.h>
 #include <systemlib/param/param.h>
+
+#include "Block.hpp"
+#include <containers/List.hpp>
+#include <cstddef>	// NULL
 
 namespace control
 {
 
 class Block;
 
-// A base class for block params that enables traversing linked list.
-class BlockParamBase : public ListNode<BlockParamBase *>
+/**
+ * A base class for block params that enables traversing linked list.
+ */
+class __EXPORT BlockParamBase : public ListNode<BlockParamBase *>
 {
 public:
 	/**
@@ -60,50 +62,71 @@ public:
 	 * @param parent_prefix Set to true to include the parent name in the parameter name
 	 */
 	BlockParamBase(Block *parent, const char *name, bool parent_prefix = true);
-	virtual ~BlockParamBase() = default;
-
-	virtual bool update() = 0;
+	virtual ~BlockParamBase() {};
+	virtual void update() = 0;
 	const char *getName() { return param_name(_handle); }
-
 protected:
-	param_t _handle{PARAM_INVALID};
+	param_t _handle;
 };
 
-// Parameters that are tied to blocks for updating and naming.
+/**
+ * Parameters that are tied to blocks for updating and nameing.
+ */
+
 template <class T>
-class __EXPORT BlockParam final : public BlockParamBase
+class BlockParam : public BlockParamBase
 {
 public:
-	BlockParam(Block *block, const char *name, bool parent_prefix = true);
-	BlockParam(Block *block, const char *name, bool parent_prefix, T &extern_val);
-
-	~BlockParam() override = default;
-
-	// no copy, assignment, move, move assignment
+	BlockParam(Block *block, const char *name,
+		   bool parent_prefix = true);
 	BlockParam(const BlockParam &) = delete;
 	BlockParam &operator=(const BlockParam &) = delete;
-	BlockParam(BlockParam &&) = delete;
-	BlockParam &operator=(BlockParam &&) = delete;
 
-	T get() const { return _val; }
+	inline T get() const { return _val; }
 
-	// Store the parameter value to the parameter storage (@see param_set())
-	bool commit() { return (param_set(_handle, &_val) == PX4_OK); }
+	/**
+	 * Store the parameter value to the parameter storage (@see param_set())
+	 */
+	void commit();
 
-	// Store the parameter value to the parameter storage, w/o notifying the system (@see param_set_no_notification())
-	bool commit_no_notification() { return (param_set_no_notification(_handle, &_val) == PX4_OK); }
+	/**
+	 * Store the parameter value to the parameter storage, w/o notifying the system (@see param_set_no_notification())
+	 */
+	void commit_no_notification();
 
-	void set(T val) { _val = val; }
-
-	bool update() override { return (param_get(_handle, &_val) == PX4_OK); }
-
+	void set(T val);
+	void update() override;
+	virtual ~BlockParam();
 protected:
 	T _val;
 };
 
 typedef BlockParam<float> BlockParamFloat;
-typedef BlockParam<int32_t> BlockParamInt;
-typedef BlockParam<float &> BlockParamExtFloat;
-typedef BlockParam<int32_t &> BlockParamExtInt;
+typedef BlockParam<int> BlockParamInt;
+
+
+/**
+ * Same as BlockParam, but in addition with a pointer to an external field that will be
+ * set to the value of the parameter.
+ * (BlockParam should be prefered over this)
+ */
+template <class T>
+class BlockParamExt : public BlockParam<T>
+{
+public:
+	BlockParamExt(Block *block, const char *name,
+		      bool parent_prefix, T &extern_val);
+	BlockParamExt(const BlockParamExt &) = delete;
+	BlockParamExt &operator=(const BlockParamExt &) = delete;
+
+	void set(T val);
+	void update() override;
+	virtual ~BlockParamExt();
+protected:
+	T &_extern_val;
+};
+
+typedef BlockParamExt<float> BlockParamExtFloat;
+typedef BlockParamExt<int> BlockParamExtInt;
 
 } // namespace control

@@ -42,60 +42,61 @@
 
 #pragma once
 
+#include <uORB/topics/control_state.h>
+#include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/airspeed.h>
-#include <uORB/topics/sensor_bias.h>
-#include <uORB/topics/vehicle_local_position.h>
 
 #include "LandDetector.h"
 
 namespace land_detector
 {
 
-class FixedwingLandDetector final : public LandDetector
+class FixedwingLandDetector : public LandDetector
 {
 public:
 	FixedwingLandDetector();
 
 protected:
-	void _initialize_topics() override;
-	void _update_params() override;
-	void _update_topics() override;
+	virtual void _initialize_topics() override;
 
-	bool _get_landed_state() override;
-	float _get_max_altitude() override;
+	virtual void _update_params() override;
 
+	virtual void _update_topics() override;
+
+	virtual bool _get_landed_state() override;
+
+	virtual bool _get_ground_contact_state() override;
+
+	virtual bool _get_freefall_state() override;
+
+	virtual float _get_max_altitude() override;
 private:
-
-	/** Time in us that landing conditions have to hold before triggering a land. */
-	static constexpr uint64_t LANDED_TRIGGER_TIME_US = 2000000;
-	static constexpr uint64_t FLYING_TRIGGER_TIME_US = 0;
-
 	struct {
 		param_t maxVelocity;
 		param_t maxClimbRate;
 		param_t maxAirSpeed;
 		param_t maxIntVelocity;
-	} _paramHandle{};
+	} _paramHandle;
 
 	struct {
 		float maxVelocity;
 		float maxClimbRate;
 		float maxAirSpeed;
 		float maxIntVelocity;
-	} _params{};
+	} _params;
 
-	int _airspeedSub{-1};
-	int _sensor_bias_sub{-1};
-	int _local_pos_sub{-1};
+	int _controlStateSub;
+	int _armingSub;
+	int _airspeedSub;
 
-	airspeed_s _airspeed{};
-	sensor_bias_s _sensors{};
-	vehicle_local_position_s _local_pos{};
+	struct control_state_s _controlState;
+	struct actuator_armed_s _arming;
+	struct airspeed_s _airspeed;
 
-	float _velocity_xy_filtered{0.0f};
-	float _velocity_z_filtered{0.0f};
-	float _airspeed_filtered{0.0f};
-	float _accel_horz_lp{0.0f};
+	float _velocity_xy_filtered;
+	float _velocity_z_filtered;
+	float _airspeed_filtered;
+	float _accel_horz_lp;
 };
 
 } // namespace land_detector

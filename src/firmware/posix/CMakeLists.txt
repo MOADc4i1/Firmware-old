@@ -1,8 +1,4 @@
-include (common/px4_upload)
-
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
-
-get_property(module_libraries GLOBAL PROPERTY PX4_LIBRARIES)
 
 px4_posix_generate_builtin_commands(
 	OUT apps
@@ -14,6 +10,7 @@ set(MAIN_SRC ${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp)
 set(UPLOAD_NAME upload)
 
 if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
+
 	include(fastrpc)
 	include(linux_app)
 
@@ -40,7 +37,7 @@ if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
 	px4_add_adb_push(OUT ${UPLOAD_NAME}
 				OS ${OS}
 				BOARD ${BOARD}
-				FILES $<TARGET_FILE:${APP_NAME}>
+				FILES ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}
 				${PX4_SOURCE_DIR}/posix-configs/eagle/flight/mainapp.config
 				DEPENDS ${APP_NAME}
 				DEST /home/linaro)
@@ -65,7 +62,7 @@ elseif ("${BOARD}" STREQUAL "rpi")
 	px4_add_scp_push(OUT ${UPLOAD_NAME}
 				OS ${OS}
 				BOARD ${BOARD}
-				FILES $<TARGET_FILE:${APP_NAME}>
+				FILES ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}
 				${RPI_CONFIG_FILES}
 				${PX4_SOURCE_DIR}/ROMFS
 				DEPENDS ${APP_NAME}
@@ -100,16 +97,14 @@ elseif ("${BOARD}" STREQUAL "bebop")
 	px4_add_adb_push_to_bebop(OUT ${UPLOAD_NAME}
 				OS ${OS}
 				BOARD ${BOARD}
-				FILES $<TARGET_FILE:px4>.stripped
-				DEPENDS px4
+				FILES ${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}
+				DEPENDS ${APP_NAME}
 				DEST /usr/bin)
 
 elseif ("${BOARD}" STREQUAL "sitl")
 
 	include(./sitl_target.cmake)
-	if(BUILD_TESTING)
-		include(./sitl_tests.cmake)
-	endif()
+	include(./sitl_tests.cmake)
 
 else()
 
@@ -143,8 +138,4 @@ install(TARGETS px4 DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/ROMFS DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/posix-configs DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 
-add_custom_command(OUTPUT ${APP_NAME}.stripped
-			COMMAND ${STRIP_TOOL} -R .comment -R .gnu.version -o $<TARGET_FILE:px4>.stripped $<TARGET_FILE:px4>
-			DEPENDS px4
-			)
-add_custom_target(strip DEPENDS "${APP_NAME}.stripped")
+# vim: set noet ft=cmake fenc=utf-8 ff=unix :

@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2016 - 2017 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2016 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,7 +36,16 @@
 
 #include "navio_rgbled.h"
 
+#define GPIO_LED_CNF    (GPIO_CNF_OUTPUT)
+#define GPIO_LED_R      (GPIO_PIN4)
+#define GPIO_LED_G      (GPIO_PIN27)
+#define GPIO_LED_B      (GPIO_PIN6)
+
 #define RGBLED_BASE_DEVICE_PATH "/dev/rgbled"
+
+// inverted
+#define LED_ON  0
+#define LED_OFF 1
 
 using namespace DriverFramework;
 
@@ -47,9 +56,6 @@ RGBLED::RGBLED(const char *name)
 		 RGBLED_BASE_DEVICE_PATH,
 		 DeviceBusType_UNKNOWN,
 		 0)
-	, _gpioR(4)
-	, _gpioG(27)
-	, _gpioB(6)
 {
 };
 
@@ -69,47 +75,11 @@ int RGBLED::start()
 		return res;
 	}
 
-	res = _gpioR.exportPin();
+	_gpio.start();
 
-	if (res != 0) {
-		PX4_ERR("red led: failed to export");
-		goto cleanup;
-	}
-
-	res = _gpioR.setDirection(LinuxGPIO::Direction::OUT);
-
-	if (res != 0) {
-		PX4_ERR("red led: failed to set direction");
-		goto cleanup;
-	}
-
-	res = _gpioG.exportPin();
-
-	if (res != 0) {
-		PX4_ERR("green led: failed to export");
-		goto cleanup;
-	}
-
-	res = _gpioG.setDirection(LinuxGPIO::Direction::OUT);
-
-	if (res != 0) {
-		PX4_ERR("green led: failed to set direction");
-		goto cleanup;
-	}
-
-	res = _gpioB.exportPin();
-
-	if (res != 0) {
-		PX4_ERR("blue led: failed to export");
-		goto cleanup;
-	}
-
-	res = _gpioB.setDirection(LinuxGPIO::Direction::OUT);
-
-	if (res != 0) {
-		PX4_ERR("blue led: failed to set direction");
-		goto cleanup;
-	}
+	_gpio.configgpio(GPIO_LED_CNF | GPIO_LED_R);
+	_gpio.configgpio(GPIO_LED_CNF | GPIO_LED_G);
+	_gpio.configgpio(GPIO_LED_CNF | GPIO_LED_B);
 
 	// update at fixed interval
 	DevObj::setSampleInterval(_led_controller.maximum_update_interval());
@@ -122,22 +92,13 @@ int RGBLED::start()
 	}
 
 	return res;
-
-cleanup:
-	_gpioR.unexportPin();
-	_gpioG.unexportPin();
-	_gpioB.unexportPin();
-
-	return res;
 }
 
 int RGBLED::stop()
 {
 	int res;
 
-	_gpioR.unexportPin();
-	_gpioG.unexportPin();
-	_gpioB.unexportPin();
+	_gpio.stop();
 
 	res = DevObj::stop();
 
@@ -162,52 +123,52 @@ void RGBLED::_measure()
 	if (_led_controller.update(led_control_data) == 1) {
 		switch (led_control_data.leds[0].color) {
 		case led_control_s::COLOR_RED:
-			_gpioR.writeValue(LinuxGPIO::Value::LOW);
-			_gpioG.writeValue(LinuxGPIO::Value::HIGH);
-			_gpioB.writeValue(LinuxGPIO::Value::HIGH);
+			_gpio.gpiowrite(GPIO_LED_R, LED_ON);
+			_gpio.gpiowrite(GPIO_LED_G, LED_OFF);
+			_gpio.gpiowrite(GPIO_LED_B, LED_OFF);
 			break;
 
 		case led_control_s::COLOR_GREEN:
-			_gpioR.writeValue(LinuxGPIO::Value::HIGH);
-			_gpioG.writeValue(LinuxGPIO::Value::LOW);
-			_gpioB.writeValue(LinuxGPIO::Value::HIGH);
+			_gpio.gpiowrite(GPIO_LED_R, LED_OFF);
+			_gpio.gpiowrite(GPIO_LED_G, LED_ON);
+			_gpio.gpiowrite(GPIO_LED_B, LED_OFF);
 			break;
 
 		case led_control_s::COLOR_BLUE:
-			_gpioR.writeValue(LinuxGPIO::Value::HIGH);
-			_gpioG.writeValue(LinuxGPIO::Value::HIGH);
-			_gpioB.writeValue(LinuxGPIO::Value::LOW);
+			_gpio.gpiowrite(GPIO_LED_R, LED_OFF);
+			_gpio.gpiowrite(GPIO_LED_G, LED_OFF);
+			_gpio.gpiowrite(GPIO_LED_B, LED_ON);
 			break;
 
 		case led_control_s::COLOR_AMBER: //make it the same as yellow
 		case led_control_s::COLOR_YELLOW:
-			_gpioR.writeValue(LinuxGPIO::Value::LOW);
-			_gpioG.writeValue(LinuxGPIO::Value::LOW);
-			_gpioB.writeValue(LinuxGPIO::Value::HIGH);
+			_gpio.gpiowrite(GPIO_LED_R, LED_ON);
+			_gpio.gpiowrite(GPIO_LED_G, LED_ON);
+			_gpio.gpiowrite(GPIO_LED_B, LED_OFF);
 			break;
 
 		case led_control_s::COLOR_PURPLE:
-			_gpioR.writeValue(LinuxGPIO::Value::LOW);
-			_gpioG.writeValue(LinuxGPIO::Value::HIGH);
-			_gpioB.writeValue(LinuxGPIO::Value::LOW);
+			_gpio.gpiowrite(GPIO_LED_R, LED_ON);
+			_gpio.gpiowrite(GPIO_LED_G, LED_OFF);
+			_gpio.gpiowrite(GPIO_LED_B, LED_ON);
 			break;
 
 		case led_control_s::COLOR_CYAN:
-			_gpioR.writeValue(LinuxGPIO::Value::HIGH);
-			_gpioG.writeValue(LinuxGPIO::Value::LOW);
-			_gpioB.writeValue(LinuxGPIO::Value::LOW);
+			_gpio.gpiowrite(GPIO_LED_R, LED_OFF);
+			_gpio.gpiowrite(GPIO_LED_G, LED_ON);
+			_gpio.gpiowrite(GPIO_LED_B, LED_ON);
 			break;
 
 		case led_control_s::COLOR_WHITE:
-			_gpioR.writeValue(LinuxGPIO::Value::LOW);
-			_gpioG.writeValue(LinuxGPIO::Value::LOW);
-			_gpioB.writeValue(LinuxGPIO::Value::LOW);
+			_gpio.gpiowrite(GPIO_LED_R, LED_ON);
+			_gpio.gpiowrite(GPIO_LED_G, LED_ON);
+			_gpio.gpiowrite(GPIO_LED_B, LED_ON);
 			break;
 
 		default: // led_control_s::COLOR_OFF
-			_gpioR.writeValue(LinuxGPIO::Value::HIGH);
-			_gpioG.writeValue(LinuxGPIO::Value::HIGH);
-			_gpioB.writeValue(LinuxGPIO::Value::HIGH);
+			_gpio.gpiowrite(GPIO_LED_R, LED_OFF);
+			_gpio.gpiowrite(GPIO_LED_G, LED_OFF);
+			_gpio.gpiowrite(GPIO_LED_B, LED_OFF);
 			break;
 		}
 	}

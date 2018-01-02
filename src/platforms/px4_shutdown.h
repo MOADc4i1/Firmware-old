@@ -69,7 +69,8 @@ __EXPORT int px4_unregister_shutdown_hook(shutdown_hook_t hook);
 
 
 /**
- * Request the system to shut down or reboot.
+ * Request the system to shut down. It's save to call this from an IRQ context,
+ * but the work queues need to be initialized already.
  * Note the following:
  * - The system might not support to shutdown (or reboot). In that case -EINVAL will
  *   be returned.
@@ -80,20 +81,6 @@ __EXPORT int px4_unregister_shutdown_hook(shutdown_hook_t hook);
  * @return 0 on success, <0 on error
  */
 __EXPORT int px4_shutdown_request(bool reboot, bool to_bootloader);
-
-
-/**
- * Grab the shutdown lock. It will prevent the system from shutting down until the lock is released.
- * It is safe to call this recursively.
- * @return 0 on success, <0 on error
- */
-__EXPORT int px4_shutdown_lock(void);
-
-/**
- * Release the shutdown lock.
- * @return 0 on success, <0 on error
- */
-__EXPORT int px4_shutdown_unlock(void);
 
 __END_DECLS
 

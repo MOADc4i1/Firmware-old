@@ -74,7 +74,7 @@
 #include <drivers/drv_mixer.h>
 
 #include <systemlib/systemlib.h>
-#include <lib/mixer/mixer.h>
+#include <systemlib/mixer/mixer.h>
 
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/actuator_armed.h>
@@ -82,7 +82,11 @@
 
 #include <systemlib/err.h>
 
+#ifdef __PX4_NUTTX
 class PWMSim : public device::CDev
+#else
+class PWMSim : public device::VDev
+#endif
 {
 	const uint32_t PWM_SIM_DISARMED_MAGIC = 900;
 	const uint32_t PWM_SIM_FAILSAFE_MAGIC = 600;
@@ -174,7 +178,12 @@ bool PWMSim::_lockdown = false;
 bool PWMSim::_failsafe = false;
 
 PWMSim::PWMSim() :
-	CDev("pwm_out_sim", PWM_OUTPUT0_DEVICE_PATH),
+#ifdef __PX4_NUTTX
+	CDev
+#else
+	VDev
+#endif
+	("pwm_out_sim", PWM_OUTPUT0_DEVICE_PATH),
 	_task(-1),
 	_mode(MODE_NONE),
 	_update_rate(50),
@@ -190,6 +199,7 @@ PWMSim::PWMSim() :
 	_task_should_exit(false),
 	_mixers(nullptr)
 {
+	_debug_enabled = true;
 	memset(_controls, 0, sizeof(_controls));
 
 	_control_topics[0] = ORB_ID(actuator_controls_0);
@@ -234,7 +244,11 @@ PWMSim::init()
 	ASSERT(_task == -1);
 
 	/* do regular cdev init */
+#ifdef __PX4_NUTTX
 	ret = CDev::init();
+#else
+	ret = VDev::init();
+#endif
 
 	if (ret != OK) {
 		return ret;
@@ -247,7 +261,7 @@ PWMSim::init()
 	_task = px4_task_spawn_cmd("pwm_out_sim",
 				   SCHED_DEFAULT,
 				   SCHED_PRIORITY_DEFAULT,
-				   1300,
+				   1200,
 				   (px4_main_t)&PWMSim::task_main_trampoline,
 				   nullptr);
 
@@ -473,7 +487,7 @@ PWMSim::task_main()
 			}
 
 			/* do mixing */
-			num_outputs = _mixers->mix(&outputs.output[0], num_outputs);
+			num_outputs = _mixers->mix(&outputs.output[0], num_outputs, nullptr);
 			outputs.noutputs = num_outputs;
 			outputs.timestamp = hrt_absolute_time();
 
@@ -595,7 +609,11 @@ PWMSim::ioctl(device::file_t *filp, int cmd, unsigned long arg)
 
 	/* if nobody wants it, let CDev have it */
 	if (ret == -ENOTTY) {
+#ifdef __PX4_NUTTX
 		ret = CDev::ioctl(filp, cmd, arg);
+#else
+		ret = VDev::ioctl(filp, cmd, arg);
+#endif
 	}
 
 	return ret;
@@ -702,7 +720,6 @@ PWMSim::pwm_ioctl(device::file_t *filp, int cmd, unsigned long arg)
 		}
 
 	/* FALLTHROUGH */
-
 	case PWM_SERVO_SET(0):
 	case PWM_SERVO_SET(1):
 		if (arg < 2100) {
@@ -724,8 +741,6 @@ PWMSim::pwm_ioctl(device::file_t *filp, int cmd, unsigned long arg)
 			break;
 		}
 
-	/* FALLTHROUGH */
-
 	case PWM_SERVO_GET(3):
 	case PWM_SERVO_GET(2):
 		if (_num_outputs < 4) {
@@ -734,7 +749,6 @@ PWMSim::pwm_ioctl(device::file_t *filp, int cmd, unsigned long arg)
 		}
 
 	/* FALLTHROUGH */
-
 	case PWM_SERVO_GET(1):
 	case PWM_SERVO_GET(0): {
 			*(servo_position_t *)arg = 1500;
@@ -851,6 +865,8 @@ enum PortMode {
 	PORT_MODE_UNDEFINED = 0,
 	PORT1_MODE_UNSET,
 	PORT1_FULL_PWM,
+	PORT1_PWM_AND_SERIAL,
+	PORT1_PWM_AND_GPIO,
 	PORT2_MODE_UNSET,
 	PORT2_8PWM,
 	PORT2_12PWM,
@@ -884,6 +900,18 @@ hil_new_mode(PortMode new_mode)
 		servo_mode = PWMSim::MODE_8PWM;
 		break;
 
+	case PORT1_PWM_AND_SERIAL:
+		/* select 2-pin PWM mode */
+		servo_mode = PWMSim::MODE_2PWM;
+//		/* set RX/TX multi-GPIOs to serial mode */
+//		gpio_bits = GPIO_MULTI_3 | GPIO_MULTI_4;
+		break;
+
+	case PORT1_PWM_AND_GPIO:
+		/* select 2-pin PWM mode */
+		servo_mode = PWMSim::MODE_2PWM;
+		break;
+
 	case PORT2_8PWM:
 		/* select 8-pin PWM mode */
 		servo_mode = PWMSim::MODE_8PWM;
@@ -899,6 +927,10 @@ hil_new_mode(PortMode new_mode)
 		servo_mode = PWMSim::MODE_16PWM;
 		break;
 	}
+
+//	/* adjust GPIO config for serial mode(s) */
+//	if (gpio_bits != 0)
+//		g_pwm_sim->ioctl(0, GPIO_SET_ALT_1, gpio_bits);
 
 	/* (re)set the PWM output mode */
 	g_pwm_sim->set_mode(servo_mode);
@@ -962,7 +994,7 @@ static void
 usage()
 {
 	PX4_WARN("unrecognized command, try:");
-	PX4_WARN("  mode_pwm, mode_port2_pwm8, mode_port2_pwm12, mode_port2_pwm16");
+	PX4_WARN("  mode_pwm, mode_gpio_serial, mode_pwm_serial, mode_pwm_gpio, mode_port2_pwm8, mode_port2_pwm12, mode_port2_pwm16");
 }
 
 int
@@ -994,6 +1026,12 @@ pwm_out_sim_main(int argc, char *argv[])
 	// this was all cut-and-pasted from the FMU driver; it's junk
 	if (!strcmp(verb, "mode_pwm")) {
 		new_mode = PORT1_FULL_PWM;
+
+	} else if (!strcmp(verb, "mode_pwm_serial")) {
+		new_mode = PORT1_PWM_AND_SERIAL;
+
+	} else if (!strcmp(verb, "mode_pwm_gpio")) {
+		new_mode = PORT1_PWM_AND_GPIO;
 
 	} else if (!strcmp(verb, "mode_port2_pwm8")) {
 		new_mode = PORT2_8PWM;

@@ -32,16 +32,14 @@
 ############################################################################
 
 add_custom_command(OUTPUT topic_listener.cpp
-                COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/generate_listener.py ${PX4_SOURCE_DIR} > topic_listener.cpp
-                DEPENDS generate_listener.py uorb_msgs
+                COMMAND ${PYTHON_EXECUTABLE} ${PX4_SOURCE_DIR}/Tools/generate_listener.py ${PX4_SOURCE_DIR} > topic_listener.cpp
+                DEPENDS msg_gen
                 )
 
 add_custom_target(generate_topic_listener
 	DEPENDS
 		topic_listener.cpp
-		generate_listener.py
-		uorb_msgs
-	)
+		${PX4_SOURCE_DIR}/Tools/generate_listener.py)
 
 px4_add_module(
 	MODULE systemcmds__topic_listener

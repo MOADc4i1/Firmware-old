@@ -34,8 +34,6 @@
 /// @file calibration_routines.h
 ///	@authot Don Gagne <don@thegagnes.com>
 
-#pragma once
-
 /**
  * Least-squares fit of a sphere to a set of points.
  *

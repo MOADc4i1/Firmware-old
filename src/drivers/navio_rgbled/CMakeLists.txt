@@ -30,6 +30,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
+include_directories(../navio_gpio)
 
 px4_add_module(
 	MODULE drivers__navio_rgbled
@@ -39,7 +40,7 @@ px4_add_module(
 		navio_rgbled.cpp
 	DEPENDS
 		platforms__common
-		drivers__linux_gpio
+		drivers__navio_gpio
 		lib__led
 	)
 

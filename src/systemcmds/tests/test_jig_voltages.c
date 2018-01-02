@@ -48,6 +48,7 @@
 
 #include "tests_main.h"
 
+#include <px4_adc.h>
 #include <drivers/drv_adc.h>
 #include <systemlib/err.h>
 
@@ -94,9 +95,8 @@ int test_jig_voltages(int argc, char *argv[])
 		return 1;
 	}
 
-	/* make space for the  maximum channels */
-	px4_adc_msg_t data[PX4_MAX_ADC_CHANNELS];
-
+	/* make space for a maximum of eight channels */
+	struct adc_msg_s data[8];
 	/* read all channels available */
 	ssize_t count = read(fd, data, sizeof(data));
 

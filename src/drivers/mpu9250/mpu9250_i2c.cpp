@@ -112,7 +112,7 @@ MPU9250_I2C::ioctl(unsigned operation, unsigned &arg)
 	switch (operation) {
 
 	case ACCELIOCGEXTERNAL:
-		return external();
+		return _bus == PX4_I2C_BUS_EXPANSION ? 1 : 0;
 
 	case DEVIOCGDEVICEID:
 		return CDev::ioctl(nullptr, operation, arg);

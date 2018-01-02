@@ -113,7 +113,18 @@ HMC5883_I2C::ioctl(unsigned operation, unsigned &arg)
 	switch (operation) {
 
 	case MAGIOCGEXTERNAL:
-		return external();
+#ifdef PX4_I2C_BUS_ONBOARD
+		if (_bus == PX4_I2C_BUS_ONBOARD) {
+			return 0;
+
+		} else {
+			return 1;
+		}
+
+#else
+		/* assume external for all boards that don't define PX4_I2C_BUS_ONBOARD */
+		return 1;
+#endif
 
 	case DEVIOCGDEVICEID:
 		return CDev::ioctl(nullptr, operation, arg);

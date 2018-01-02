@@ -47,6 +47,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#include <px4_adc.h>
 
 #include "tests_main.h"
 

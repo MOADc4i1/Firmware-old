@@ -131,9 +131,9 @@ int uORB::Manager::orb_exists(const struct orb_metadata *meta, int instance)
 		return ERROR;
 	}
 
-#if defined(__PX4_NUTTX)
+#if __PX4_NUTTX
 	struct stat buffer;
-	ret = stat(path, &buffer);
+	return stat(path, &buffer);
 #else
 	ret = px4_access(path, F_OK);
 
@@ -141,28 +141,8 @@ int uORB::Manager::orb_exists(const struct orb_metadata *meta, int instance)
 		ret = (_remote_topics.find(meta->o_name) != _remote_topics.end()) ? OK : ERROR;
 	}
 
-#endif
-
-	if (ret == 0) {
-		// we know the topic exists, but it's not necessarily advertised/published yet (for example
-		// if there is only a subscriber)
-		// The open() will not lead to memory allocations.
-		int fd = px4_open(path, 0);
-
-		if (fd >= 0) {
-			unsigned long is_published;
-
-			if (px4_ioctl(fd, ORBIOCISPUBLISHED, (unsigned long)&is_published) == 0) {
-				if (!is_published) {
-					ret = ERROR;
-				}
-			}
-
-			px4_close(fd);
-		}
-	}
-
 	return ret;
+#endif
 }
 
 orb_advert_t uORB::Manager::orb_advertise_multi(const struct orb_metadata *meta, const void *data, int *instance,
@@ -199,7 +179,7 @@ orb_advert_t uORB::Manager::orb_advertise_multi(const struct orb_metadata *meta,
 	fd = node_open(PUBSUB, meta, data, true, instance, priority);
 
 	if (fd == ERROR) {
-		PX4_ERR("%s advertise failed", meta->o_name);
+		PX4_WARN("node_open as advertiser failed.");
 		return nullptr;
 	}
 
@@ -217,7 +197,7 @@ orb_advert_t uORB::Manager::orb_advertise_multi(const struct orb_metadata *meta,
 	px4_close(fd);
 
 	if (result == ERROR) {
-		PX4_WARN("px4_ioctl ORBIOCGADVERTISER failed. fd = %d", fd);
+		PX4_WARN("px4_ioctl ORBIOCGADVERTISER  failed. fd = %d", fd);
 		return nullptr;
 	}
 

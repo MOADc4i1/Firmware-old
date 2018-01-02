@@ -34,6 +34,7 @@ px4_add_module(
 	MODULE drivers__aerofc_adc
 	MAIN aerofc_adc
 	COMPILE_FLAGS
+		-Os
 	SRCS
 		aerofc_adc.cpp
 	DEPENDS

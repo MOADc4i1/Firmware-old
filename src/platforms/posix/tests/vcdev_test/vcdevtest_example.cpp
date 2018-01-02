@@ -66,7 +66,7 @@ static int writer_main(int argc, char *argv[])
 		return -px4_errno;
 	}
 
-	int ret = 0;
+	int ret;
 	int i = 0;
 
 	while (!g_exit) {
@@ -99,13 +99,13 @@ public:
 	size_t _read_offset;
 };
 
-class VCDevNode : public CDev
+class VCDevNode : public VDev
 {
 public:
 	VCDevNode() :
-		CDev("vcdevtest", TESTDEV),
+		VDev("vcdevtest", TESTDEV),
 		_is_open_for_write(false),
-		_write_offset(0) {}
+		_write_offset(0) {};
 
 	~VCDevNode() {}
 
@@ -127,7 +127,7 @@ int VCDevNode::open(device::file_t *handlep)
 		return -1;
 	}
 
-	int ret = CDev::open(handlep);
+	int ret = VDev::open(handlep);
 
 	if (ret != 0) {
 		return ret;
@@ -146,7 +146,7 @@ int VCDevNode::close(device::file_t *handlep)
 {
 	delete (PrivData *)handlep->priv;
 	handlep->priv = nullptr;
-	CDev::close(handlep);
+	VDev::close(handlep);
 
 	// Enable a new writer of the device is re-opened for write
 	if ((handlep->flags & PX4_F_WRONLY) && _is_open_for_write) {
@@ -188,7 +188,7 @@ VCDevExample::~VCDevExample()
 {
 	if (_node) {
 		delete _node;
-		_node = nullptr;
+		_node = 0;
 	}
 }
 
@@ -272,7 +272,7 @@ int VCDevExample::main()
 
 	_node = new VCDevNode();
 
-	if (_node == nullptr) {
+	if (_node == 0) {
 		PX4_INFO("Failed to allocate VCDevNode");
 		return -ENOMEM;
 	}
@@ -289,7 +289,7 @@ int VCDevExample::main()
 		return -px4_errno;
 	}
 
-	void *p = nullptr;
+	void *p = 0;
 	int ret = px4_ioctl(fd, DIOC_GETPRIV, (unsigned long)&p);
 
 	if (ret < 0) {
@@ -318,7 +318,7 @@ int VCDevExample::main()
 				 SCHED_PRIORITY_MAX - 6,
 				 2000,
 				 writer_main,
-				 (char *const *)nullptr);
+				 (char *const *)NULL);
 
 	ret = 0;
 

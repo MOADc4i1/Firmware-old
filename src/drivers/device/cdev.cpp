@@ -32,38 +32,80 @@
  ****************************************************************************/
 
 /**
- * @file CDev.cpp
+ * @file cdev.cpp
  *
  * Character device base class.
  */
 
-#include "CDev.hpp"
-
-#include <cstring>
-
-#include "px4_posix.h"
+#include "device.h"
 #include "drivers/drv_device.h"
+
+#include <sys/ioctl.h>
+#include <arch/irq.h>
+
+#include <stdlib.h>
+#include <stdio.h>
+
+#ifdef CONFIG_DISABLE_POLL
+# error This driver is not compatible with CONFIG_DISABLE_POLL
+#endif
 
 namespace device
 {
 
-CDev::CDev(const char *name, const char *devname) :
-	Device(name),
-	_devname(devname)
+/* how much to grow the poll waiter set each time it has to be increased */
+static const unsigned pollset_increment = 0;
+
+/*
+ * The standard NuttX operation dispatch table can't call C++ member functions
+ * directly, so we have to bounce them through this dispatch table.
+ */
+static int	cdev_open(file_t *filp);
+static int	cdev_close(file_t *filp);
+static ssize_t	cdev_read(file_t *filp, char *buffer, size_t buflen);
+static ssize_t	cdev_write(file_t *filp, const char *buffer, size_t buflen);
+static off_t	cdev_seek(file_t *filp, off_t offset, int whence);
+static int	cdev_ioctl(file_t *filp, int cmd, unsigned long arg);
+static int	cdev_poll(file_t *filp, px4_pollfd_struct_t *fds, bool setup);
+
+/**
+ * Character device indirection table.
+ *
+ * Every cdev we register gets the same function table; we use the private data
+ * field in the inode to store the instance pointer.
+ *
+ * Note that we use the GNU extension syntax here because we don't get designated
+ * initialisers in gcc 4.6.
+ */
+const struct file_operations CDev::fops = {
+open	: cdev_open,
+close	: cdev_close,
+read	: cdev_read,
+write	: cdev_write,
+seek	: cdev_seek,
+ioctl	: cdev_ioctl,
+poll	: cdev_poll,
+};
+
+CDev::CDev(const char *name,
+	   const char *devname,
+	   int irq) :
+	// base class
+	Device(name, irq),
+	// public
+	// protected
+	_pub_blocked(false),
+	// private
+	_devname(devname),
+	_registered(false),
+	_max_pollwaiters(0),
+	_open_count(0),
+	_pollset(nullptr)
 {
-	DEVICE_DEBUG("CDev::CDev");
-
-	int ret = px4_sem_init(&_lock, 0, 1);
-
-	if (ret != 0) {
-		PX4_WARN("SEM INIT FAIL: ret %d", ret);
-	}
 }
 
 CDev::~CDev()
 {
-	DEVICE_DEBUG("CDev::~CDev");
-
 	if (_registered) {
 		unregister_driver(_devname);
 	}
@@ -71,15 +113,11 @@ CDev::~CDev()
 	if (_pollset) {
 		delete[](_pollset);
 	}
-
-	px4_sem_destroy(&_lock);
 }
 
 int
 CDev::register_class_devname(const char *class_devname)
 {
-	DEVICE_DEBUG("CDev::register_class_devname %s", class_devname);
-
 	if (class_devname == nullptr) {
 		return -EINVAL;
 	}
@@ -92,9 +130,7 @@ CDev::register_class_devname(const char *class_devname)
 		snprintf(name, sizeof(name), "%s%d", class_devname, class_instance);
 		ret = register_driver(name, &fops, 0666, (void *)this);
 
-		if (ret == OK) {
-			break;
-		}
+		if (ret == OK) { break; }
 
 		class_instance++;
 	}
@@ -109,7 +145,6 @@ CDev::register_class_devname(const char *class_devname)
 int
 CDev::unregister_class_devname(const char *class_devname, unsigned class_instance)
 {
-	DEVICE_DEBUG("CDev::unregister_class_devname");
 	char name[32];
 	snprintf(name, sizeof(name), "%s%u", class_devname, class_instance);
 	return unregister_driver(name);
@@ -118,12 +153,10 @@ CDev::unregister_class_devname(const char *class_devname, unsigned class_instanc
 int
 CDev::init()
 {
-	DEVICE_DEBUG("CDev::init");
-
 	// base class init first
 	int ret = Device::init();
 
-	if (ret != PX4_OK) {
+	if (ret != OK) {
 		goto out;
 	}
 
@@ -131,7 +164,7 @@ CDev::init()
 	if (_devname != nullptr) {
 		ret = register_driver(_devname, &fops, 0666, (void *)this);
 
-		if (ret != PX4_OK) {
+		if (ret != OK) {
 			goto out;
 		}
 
@@ -146,10 +179,9 @@ out:
  * Default implementations of the character device interface
  */
 int
-CDev::open(file_t *filep)
+CDev::open(file_t *filp)
 {
-	DEVICE_DEBUG("CDev::open");
-	int ret = PX4_OK;
+	int ret = OK;
 
 	lock();
 	/* increment the open count */
@@ -158,9 +190,9 @@ CDev::open(file_t *filep)
 	if (_open_count == 1) {
 
 		/* first-open callback may decline the open */
-		ret = open_first(filep);
+		ret = open_first(filp);
 
-		if (ret != PX4_OK) {
+		if (ret != OK) {
 			_open_count--;
 		}
 	}
@@ -171,17 +203,15 @@ CDev::open(file_t *filep)
 }
 
 int
-CDev::open_first(file_t *filep)
+CDev::open_first(file_t *filp)
 {
-	DEVICE_DEBUG("CDev::open_first");
-	return PX4_OK;
+	return OK;
 }
 
 int
-CDev::close(file_t *filep)
+CDev::close(file_t *filp)
 {
-	DEVICE_DEBUG("CDev::close");
-	int ret = PX4_OK;
+	int ret = OK;
 
 	lock();
 
@@ -191,7 +221,7 @@ CDev::close(file_t *filep)
 
 		/* callback cannot decline the close */
 		if (_open_count == 0) {
-			ret = close_last(filep);
+			ret = close_last(filp);
 		}
 
 	} else {
@@ -204,72 +234,66 @@ CDev::close(file_t *filep)
 }
 
 int
-CDev::close_last(file_t *filep)
+CDev::close_last(file_t *filp)
 {
-	DEVICE_DEBUG("CDev::close_last");
-	return PX4_OK;
+	return OK;
 }
 
 ssize_t
-CDev::read(file_t *filep, char *buffer, size_t buflen)
+CDev::read(file_t *filp, char *buffer, size_t buflen)
 {
-	DEVICE_DEBUG("CDev::read");
 	return -ENOSYS;
 }
 
 ssize_t
-CDev::write(file_t *filep, const char *buffer, size_t buflen)
+CDev::write(file_t *filp, const char *buffer, size_t buflen)
 {
-	DEVICE_DEBUG("CDev::write");
 	return -ENOSYS;
 }
 
 off_t
-CDev::seek(file_t *filep, off_t offset, int whence)
+CDev::seek(file_t *filp, off_t offset, int whence)
 {
-	DEVICE_DEBUG("CDev::seek");
 	return -ENOSYS;
 }
 
 int
-CDev::ioctl(file_t *filep, int cmd, unsigned long arg)
+CDev::ioctl(file_t *filp, int cmd, unsigned long arg)
 {
-	DEVICE_DEBUG("CDev::ioctl");
-	int ret = -ENOTTY;
-
 	switch (cmd) {
 
 	/* fetch a pointer to the driver's private data */
 	case DIOC_GETPRIV:
 		*(void **)(uintptr_t)arg = (void *)this;
-		ret = PX4_OK;
+		return OK;
 		break;
 
 	case DEVIOCSPUBBLOCK:
 		_pub_blocked = (arg != 0);
-		ret = PX4_OK;
+		return OK;
 		break;
 
 	case DEVIOCGPUBBLOCK:
-		ret = _pub_blocked;
-		break;
-
-	case DEVIOCGDEVICEID:
-		ret = (int)_device_id.devid;
-		break;
-
-	default:
+		return _pub_blocked;
 		break;
 	}
 
-	return ret;
+	/* try the superclass. The different ioctl() function form
+	 * means we need to copy arg */
+	unsigned arg2 = arg;
+	int ret = Device::ioctl(cmd, arg2);
+
+	if (ret != -ENODEV) {
+		return ret;
+	}
+
+	return -ENOTTY;
 }
 
 int
-CDev::poll(file_t *filep, px4_pollfd_struct_t *fds, bool setup)
+CDev::poll(file_t *filp, struct pollfd *fds, bool setup)
 {
-	DEVICE_DEBUG("CDev::Poll %s", setup ? "setup" : "teardown");
-	int ret = PX4_OK;
+	int ret = OK;
 
 	/*
 	 * Lock against pollnotify() (and possibly other callers)
@@ -281,29 +305,25 @@ CDev::poll(file_t *filep, px4_pollfd_struct_t *fds, bool setup)
 		 * Save the file pointer in the pollfd for the subclass'
 		 * benefit.
 		 */
-		fds->priv = (void *)filep;
-		DEVICE_DEBUG("CDev::poll: fds->priv = %p", filep);
+		fds->priv = (void *)filp;
 
 		/*
 		 * Handle setup requests.
 		 */
 		ret = store_poll_waiter(fds);
 
-		if (ret == PX4_OK) {
+		if (ret == OK) {
 
 			/*
 			 * Check to see whether we should send a poll notification
 			 * immediately.
 			 */
-			fds->revents |= fds->events & poll_state(filep);
+			fds->revents |= fds->events & poll_state(filp);
 
 			/* yes? post the notification */
 			if (fds->revents != 0) {
 				px4_sem_post(fds->sem);
 			}
-
-		} else {
-			PX4_WARN("Store Poll Waiter error.");
 		}
 
 	} else {
@@ -321,67 +341,50 @@ CDev::poll(file_t *filep, px4_pollfd_struct_t *fds, bool setup)
 void
 CDev::poll_notify(pollevent_t events)
 {
-	DEVICE_DEBUG("CDev::poll_notify events = %0x", events);
-
 	/* lock against poll() as well as other wakeups */
-	ATOMIC_ENTER;
+	irqstate_t state = px4_enter_critical_section();
 
-	for (unsigned i = 0; i < _max_pollwaiters; i++) {
+	for (unsigned i = 0; i < _max_pollwaiters; i++)
 		if (nullptr != _pollset[i]) {
 			poll_notify_one(_pollset[i], events);
 		}
-	}
 
-	ATOMIC_LEAVE;
+	px4_leave_critical_section(state);
 }
 
 void
-CDev::poll_notify_one(px4_pollfd_struct_t *fds, pollevent_t events)
+CDev::poll_notify_one(struct pollfd *fds, pollevent_t events)
 {
-	DEVICE_DEBUG("CDev::poll_notify_one");
-
-#ifdef __PX4_NUTTX
-	int value = fds->sem->semcount;
-#else
-	int value = -1;
-	px4_sem_getvalue(fds->sem, &value);
-#endif
-
 	/* update the reported event set */
 	fds->revents |= fds->events & events;
 
-	DEVICE_DEBUG(" Events fds=%p %0x %0x %0x %d", fds, fds->revents, fds->events, events, value);
-
 	/* if the state is now interesting, wake the waiter if it's still asleep */
 	/* XXX semcount check here is a vile hack; counting semphores should not be abused as cvars */
-	if ((fds->revents != 0) && (value <= 0)) {
+	if ((fds->revents != 0) && (fds->sem->semcount <= 0)) {
 		px4_sem_post(fds->sem);
 	}
 }
 
 pollevent_t
-CDev::poll_state(file_t *filep)
+CDev::poll_state(file_t *filp)
 {
-	DEVICE_DEBUG("CDev::poll_notify");
 	/* by default, no poll events to report */
 	return 0;
 }
 
 int
-CDev::store_poll_waiter(px4_pollfd_struct_t *fds)
+CDev::store_poll_waiter(struct pollfd *fds)
 {
 	/*
 	 * Look for a free slot.
 	 */
-	DEVICE_DEBUG("CDev::store_poll_waiter");
-
 	for (unsigned i = 0; i < _max_pollwaiters; i++) {
 		if (nullptr == _pollset[i]) {
 
 			/* save the pollfd */
 			_pollset[i] = fds;
 
-			return PX4_OK;
+			return OK;
 		}
 	}
 
@@ -392,40 +395,94 @@ CDev::store_poll_waiter(px4_pollfd_struct_t *fds)
 	}
 
 	const uint8_t new_count = _max_pollwaiters > 0 ? _max_pollwaiters * 2 : 1;
-	px4_pollfd_struct_t **new_pollset = new px4_pollfd_struct_t *[new_count];
+	pollfd **new_pollset = new pollfd*[new_count];
 
 	if (!new_pollset) {
 		return -ENOMEM;
 	}
 
 	if (_max_pollwaiters > 0) {
-		memset(new_pollset + _max_pollwaiters, 0, sizeof(px4_pollfd_struct_t *) * (new_count - _max_pollwaiters));
-		memcpy(new_pollset, _pollset, sizeof(px4_pollfd_struct_t *) * _max_pollwaiters);
+		memset(new_pollset + _max_pollwaiters, 0, sizeof(pollfd *) * (new_count - _max_pollwaiters));
+		memcpy(new_pollset, _pollset, sizeof(pollfd *) * _max_pollwaiters);
 		delete[](_pollset);
 	}
 
 	_pollset = new_pollset;
 	_pollset[_max_pollwaiters] = fds;
 	_max_pollwaiters = new_count;
-	return PX4_OK;
+	return OK;
 }
 
 int
-CDev::remove_poll_waiter(px4_pollfd_struct_t *fds)
+CDev::remove_poll_waiter(struct pollfd *fds)
 {
-	DEVICE_DEBUG("CDev::remove_poll_waiter");
-
 	for (unsigned i = 0; i < _max_pollwaiters; i++) {
 		if (fds == _pollset[i]) {
 
 			_pollset[i] = nullptr;
-			return PX4_OK;
+			return OK;
 
 		}
 	}
 
-	PX4_WARN("poll: bad fd state");
+	puts("poll: bad fd state");
 	return -EINVAL;
+}
+
+static int
+cdev_open(file_t *filp)
+{
+	CDev *cdev = (CDev *)(filp->f_inode->i_private);
+
+	return cdev->open(filp);
+}
+
+static int
+cdev_close(file_t *filp)
+{
+	CDev *cdev = (CDev *)(filp->f_inode->i_private);
+
+	return cdev->close(filp);
+}
+
+static ssize_t
+cdev_read(file_t *filp, char *buffer, size_t buflen)
+{
+	CDev *cdev = (CDev *)(filp->f_inode->i_private);
+
+	return cdev->read(filp, buffer, buflen);
+}
+
+static ssize_t
+cdev_write(file_t *filp, const char *buffer, size_t buflen)
+{
+	CDev *cdev = (CDev *)(filp->f_inode->i_private);
+
+	return cdev->write(filp, buffer, buflen);
+}
+
+static off_t
+cdev_seek(file_t *filp, off_t offset, int whence)
+{
+	CDev *cdev = (CDev *)(filp->f_inode->i_private);
+
+	return cdev->seek(filp, offset, whence);
+}
+
+static int
+cdev_ioctl(file_t *filp, int cmd, unsigned long arg)
+{
+	CDev *cdev = (CDev *)(filp->f_inode->i_private);
+
+	return cdev->ioctl(filp, cmd, arg);
+}
+
+static int
+cdev_poll(file_t *filp, px4_pollfd_struct_t *fds, bool setup)
+{
+	CDev *cdev = (CDev *)(filp->f_inode->i_private);
+
+	return cdev->poll(filp, fds, setup);
 }
 
 } // namespace device

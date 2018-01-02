@@ -38,8 +38,6 @@
  */
 
 #include <px4_config.h>
-#include <px4_log.h>
-#include <px4_module.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +50,7 @@
 #include <arch/board/board.h>
 
 #include "systemlib/systemlib.h"
+#include "systemlib/err.h"
 #include <nuttx/progmem.h>
 
 
@@ -59,85 +58,58 @@
 
 __EXPORT int bl_update_main(int argc, char *argv[]);
 
-#if defined (CONFIG_STM32_STM32F4XXX)
-static int setopt(void);
-
-static void print_usage(const char *reason)
-{
-	if (reason) {
-		PX4_ERR("%s", reason);
-	}
-
-	PRINT_MODULE_DESCRIPTION("Utility to flash the bootloader from a file");
-
-	PRINT_MODULE_USAGE_NAME_SIMPLE("bl_update", "command");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("setopt", "Set option bits to unlock the FLASH (only needed if in locked state)");
-
-	PRINT_MODULE_USAGE_COMMAND_DESCR("<file>", "Bootloader bin file");
-}
-
+#if defined (CONFIG_STM32_STM32F40XX)
+static void setopt(void);
 #endif
 
 int
 bl_update_main(int argc, char *argv[])
 {
-#if !defined (CONFIG_STM32_STM32F4XXX)
-	PX4_ERR("Not supported on this HW");
-	return 1;
+#if !defined (CONFIG_STM32_STM32F40XX)
+	errx(1, "Not supportedon this HW");
 }
 #else
 
 	if (argc != 2)
 	{
-		print_usage("missing firmware filename or command");
-		return 1;
+		errx(1, "missing firmware filename or command");
 	}
 
 	if (!strcmp(argv[1], "setopt"))
 	{
-		return setopt();
+		setopt();
 	}
 
 	int fd = open(argv[1], O_RDONLY);
 
 	if (fd < 0)
 	{
-		PX4_ERR("open %s failed", argv[1]);
-		return 1;
+		err(1, "open %s", argv[1]);
 	}
 
 	struct stat s;
 
 	if (stat(argv[1], &s) != 0)
 	{
-		PX4_ERR("stat %s failed", argv[1]);
-		close(fd);
-		return 1;
+		err(1, "stat %s", argv[1]);
 	}
 
 	/* sanity-check file size */
 	if (s.st_size > BL_FILE_SIZE_LIMIT)
 	{
-		PX4_ERR("%s: file too large (limit: %u, actual: %d)", argv[1], BL_FILE_SIZE_LIMIT, s.st_size);
-		close(fd);
-		return 1;
+		errx(1, "%s: file too large (limit: %u, actual: %d)", argv[1], BL_FILE_SIZE_LIMIT, s.st_size);
 	}
 
 	uint8_t *buf = malloc(s.st_size);
 
 	if (buf == NULL)
 	{
-		PX4_ERR("failed to allocate %u bytes for firmware buffer", s.st_size);
-		close(fd);
-		return 1;
+		errx(1, "failed to allocate %u bytes for firmware buffer", s.st_size);
 	}
 
 	if (read(fd, buf, s.st_size) != s.st_size)
 	{
-		PX4_ERR("firmware read error");
-		close(fd);
-		free(buf);
-		return 1;
+		err(1, "firmware read error");
 	}
 
 	close(fd);
@@ -150,11 +122,10 @@ bl_update_main(int argc, char *argv[])
 	    ((hdr[1] - PX4_FLASH_BASE) > BL_FILE_SIZE_LIMIT))  		/* entrypoint not outside bootloader */
 	{
 		free(buf);
-		PX4_ERR("not a bootloader image");
-		return 1;
+		errx(1, "not a bootloader image");
 	}
 
-	PX4_INFO("image validated, erasing bootloader...");
+	warnx("image validated, erasing bootloader...");
 	usleep(10000);
 
 	/* prevent other tasks from running while we do this */
@@ -167,10 +138,10 @@ bl_update_main(int argc, char *argv[])
 
 	if (size != BL_FILE_SIZE_LIMIT)
 	{
-		PX4_ERR("erase error at 0x%08x", &base[size]);
+		warnx("WARNING: erase error at 0x%08x", &base[size]);
 	}
 
-	PX4_INFO("flashing...");
+	warnx("flashing...");
 
 	/* now program the bootloader - speed is not critical so use x8 mode */
 
@@ -178,7 +149,7 @@ bl_update_main(int argc, char *argv[])
 
 	if (size != s.st_size)
 	{
-		PX4_ERR("program error at 0x%0x8",  &base[size]);
+		warnx("WARNING: program error at 0x%0x8",  &base[size]);
 		goto flash_end;
 	}
 
@@ -186,18 +157,18 @@ bl_update_main(int argc, char *argv[])
 
 	stm32_flash_lock();
 
-	PX4_INFO("verifying...");
+	warnx("verifying...");
 
 	/* now run a verify pass */
 	for (int i = 0; i < s.st_size; i++)
 	{
 		if (base[i] != buf[i]) {
-			PX4_WARN("verify failed at %u - retry update, DO NOT reboot", i);
+			warnx("WARNING: verify failed at %u - retry update, DO NOT reboot", i);
 			goto flash_end;
 		}
 	}
 
-	PX4_INFO("bootloader update complete");
+	warnx("bootloader update complete");
 
 flash_end:
 	/* unlock the scheduler */
@@ -207,7 +178,7 @@ flash_end:
 	exit(0);
 }
 
-static int
+static void
 setopt(void)
 {
 	volatile uint32_t *optcr = (volatile uint32_t *)0x40023c14;
@@ -216,8 +187,7 @@ setopt(void)
 	const uint16_t opt_bits = (0 << 2);		/* BOR = 0, setting for 2.7-3.6V operation */
 
 	if ((*optcr & opt_mask) == opt_bits) {
-		PX4_INFO("option bits are already set as required");
-		return 0;
+		errx(0, "option bits are already set as required");
 	}
 
 	/* unlock the control register */
@@ -226,8 +196,7 @@ setopt(void)
 	*optkeyr = 0x4c5d6e7fU;
 
 	if (*optcr & 1) {
-		PX4_ERR("option control register unlock failed");
-		return 1;
+		errx(1, "option control register unlock failed");
 	}
 
 	/* program the new option value */
@@ -236,11 +205,10 @@ setopt(void)
 	usleep(1000);
 
 	if ((*optcr & opt_mask) == opt_bits) {
-		PX4_INFO("option bits set");
-		return 0;
+		errx(0, "option bits set");
 	}
 
-	PX4_ERR("option bits setting failed; readback 0x%04x", *optcr);
-	return 1;
+	errx(1, "option bits setting failed; readback 0x%04x", *optcr);
+
 }
-#endif // CONFIG_STM32_STM32F4XXX
+#endif // CONFIG_STM32_STM32F40XX

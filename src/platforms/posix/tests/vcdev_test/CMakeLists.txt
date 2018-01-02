@@ -32,7 +32,7 @@
 ############################################################################
 px4_add_module(
 	MODULE platforms__posix__tests__vcdev_test
-	MAIN vcdev_test
+	MAIN vcdevtest
 	SRCS
 		vcdevtest_main.cpp
 		vcdevtest_start_posix.cpp

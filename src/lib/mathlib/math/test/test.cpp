@@ -58,7 +58,6 @@ bool __EXPORT greater_than(float a, float b)
 {
 	if (a > b) {
 		return true;
-
 	} else {
 		printf("not a > b ->\n\ta: %12.8f\n\tb: %12.8f\n", double(a), double(b));
 		return false;
@@ -69,7 +68,6 @@ bool __EXPORT less_than(float a, float b)
 {
 	if (a < b) {
 		return true;
-
 	} else {
 		printf("not a < b ->\n\ta: %12.8f\n\tb: %12.8f\n", double(a), double(b));
 		return false;
@@ -80,7 +78,6 @@ bool __EXPORT greater_than_or_equal(float a, float b)
 {
 	if (a >= b) {
 		return true;
-
 	} else {
 		printf("not a >= b ->\n\ta: %12.8f\n\tb: %12.8f\n", double(a), double(b));
 		return false;
@@ -91,7 +88,6 @@ bool __EXPORT less_than_or_equal(float a, float b)
 {
 	if (a <= b) {
 		return true;
-
 	} else {
 		printf("not a <= b ->\n\ta: %12.8f\n\tb: %12.8f\n", double(a), double(b));
 		return false;
@@ -126,7 +122,6 @@ void __EXPORT float2SigExp(
 	} else {
 		exp = floor(exp);
 	}
-
 #endif
 
 	sig = num;

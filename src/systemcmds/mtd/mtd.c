@@ -40,8 +40,6 @@
  */
 
 #include <px4_config.h>
-#include <px4_log.h>
-#include <px4_module.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,6 +62,7 @@
 #include "systemlib/px4_macros.h"
 #include "systemlib/systemlib.h"
 #include "systemlib/param/param.h"
+#include "systemlib/err.h"
 
 #include <board_config.h>
 
@@ -71,11 +70,10 @@ __EXPORT int mtd_main(int argc, char *argv[]);
 
 #ifndef CONFIG_MTD
 
-/* create a fake command with decent warning to not confuse users */
+/* create a fake command with decent warnx to not confuse users */
 int mtd_main(int argc, char *argv[])
 {
-	PX4_WARN("MTD not enabled, skipping.");
-	return 1;
+	errx(1, "MTD not enabled, skipping.");
 }
 
 #else
@@ -88,7 +86,7 @@ int mtd_main(int argc, char *argv[])
 
 
 #ifdef CONFIG_MTD_RAMTRON
-static int	ramtron_attach(void);
+static void	ramtron_attach(void);
 #else
 
 #ifndef PX4_I2C_BUS_MTD
@@ -100,13 +98,14 @@ static int	ramtron_attach(void);
 #endif
 
 
-static int	at24xxx_attach(void);
+static void	at24xxx_attach(void);
 #endif
-static int	mtd_start(char *partition_names[], unsigned n_partitions);
-static int	mtd_erase(char *partition_names[], unsigned n_partitions);
-static int	mtd_readtest(char *partition_names[], unsigned n_partitions);
-static int	mtd_rwtest(char *partition_names[], unsigned n_partitions);
-static int	mtd_print_info(void);
+static void	mtd_start(char *partition_names[], unsigned n_partitions);
+static void	mtd_test(void);
+static void	mtd_erase(char *partition_names[], unsigned n_partitions);
+static void	mtd_readtest(char *partition_names[], unsigned n_partitions);
+static void	mtd_rwtest(char *partition_names[], unsigned n_partitions);
+static void	mtd_print_info(void);
 static int	mtd_get_geometry(unsigned long *blocksize, unsigned long *erasesize, unsigned long *neraseblocks,
 				 unsigned *blkpererase, unsigned *nblocks, unsigned *partsize, unsigned n_partitions);
 
@@ -119,32 +118,15 @@ static unsigned n_partitions_current = 0;
 static char *partition_names_default[] = MTD_PARTITION_TABLE;
 static const int n_partitions_default = arraySize(partition_names_default);
 
-static int
+static void
 mtd_status(void)
 {
 	if (!attached) {
-		PX4_ERR("MTD driver not started");
-		return 1;
+		errx(1, "MTD driver not started");
 	}
 
-	return mtd_print_info();
-}
-
-static void	print_usage(void)
-{
-	PRINT_MODULE_DESCRIPTION("Utility to mount and test partitions (based on FRAM/EEPROM storage as defined by the board)");
-
-	PRINT_MODULE_USAGE_NAME("mtd", "command");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("status", "Print status information");
-
-	PRINT_MODULE_USAGE_COMMAND_DESCR("start", "Mount partitions");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("readtest", "Perform read test");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("rwtest", "Perform read-write test");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("erase", "Erase partition(s)");
-
-	PRINT_MODULE_USAGE_PARAM_COMMENT("The commands 'start', 'readtest', 'rwtest' and 'erase' have an optional parameter:");
-	PRINT_MODULE_USAGE_ARG("<partition_name1> [<partition_name2> ...]",
-			       "Partition names (eg. /fs/mtd_params), use system default if not provided", true);
+	mtd_print_info();
+	exit(0);
 }
 
 int mtd_main(int argc, char *argv[])
@@ -154,47 +136,50 @@ int mtd_main(int argc, char *argv[])
 
 			/* start mapping according to user request */
 			if (argc >= 3) {
-				return mtd_start(argv + 2, argc - 2);
+				mtd_start(argv + 2, argc - 2);
 
 			} else {
-				return mtd_start(partition_names_default, n_partitions_default);
+				mtd_start(partition_names_default, n_partitions_default);
 			}
+		}
+
+		if (!strcmp(argv[1], "test")) {
+			mtd_test();
 		}
 
 		if (!strcmp(argv[1], "readtest")) {
 			if (argc >= 3) {
-				return mtd_readtest(argv + 2, argc - 2);
+				mtd_readtest(argv + 2, argc - 2);
 
 			} else {
-				return mtd_readtest(partition_names_default, n_partitions_default);
+				mtd_readtest(partition_names_default, n_partitions_default);
 			}
 		}
 
 		if (!strcmp(argv[1], "rwtest")) {
 			if (argc >= 3) {
-				return mtd_rwtest(argv + 2, argc - 2);
+				mtd_rwtest(argv + 2, argc - 2);
 
 			} else {
-				return mtd_rwtest(partition_names_default, n_partitions_default);
+				mtd_rwtest(partition_names_default, n_partitions_default);
 			}
 		}
 
 		if (!strcmp(argv[1], "status")) {
-			return mtd_status();
+			mtd_status();
 		}
 
 		if (!strcmp(argv[1], "erase")) {
 			if (argc >= 3) {
-				return mtd_erase(argv + 2, argc - 2);
+				mtd_erase(argv + 2, argc - 2);
 
 			} else {
-				return mtd_erase(partition_names_default, n_partitions_default);
+				mtd_erase(partition_names_default, n_partitions_default);
 			}
 		}
 	}
 
-	print_usage();
-	return 1;
+	errx(1, "expected a command, try 'start', 'erase', 'status', 'readtest', 'rwtest' or 'test'");
 }
 
 struct mtd_dev_s *ramtron_initialize(FAR struct spi_dev_s *dev);
@@ -202,32 +187,30 @@ struct mtd_dev_s *mtd_partition(FAR struct mtd_dev_s *mtd,
 				off_t firstblock, off_t nblocks);
 
 #ifdef CONFIG_MTD_RAMTRON
-static int
+static void
 ramtron_attach(void)
 {
 	/* initialize the right spi */
 	struct spi_dev_s *spi = px4_spibus_initialize(PX4_SPI_BUS_RAMTRON);
 
-	if (spi == NULL) {
-		PX4_ERR("failed to locate spi bus");
-		return 1;
-	}
-
 	/* this resets the spi bus, set correct bus speed again */
 	SPI_SETFREQUENCY(spi, 10 * 1000 * 1000);
 	SPI_SETBITS(spi, 8);
 	SPI_SETMODE(spi, SPIDEV_MODE3);
-	SPI_SELECT(spi, SPIDEV_FLASH(0), false);
+	SPI_SELECT(spi, SPIDEV_FLASH, false);
+
+	if (spi == NULL) {
+		errx(1, "failed to locate spi bus");
+	}
 
 	/* start the RAMTRON driver, attempt 5 times */
-
 	for (int i = 0; i < 5; i++) {
 		mtd_dev = ramtron_initialize(spi);
 
 		if (mtd_dev) {
 			/* abort on first valid result */
 			if (i > 0) {
-				PX4_WARN("mtd needed %d attempts to attach", i + 1);
+				warnx("warning: mtd needed %d attempts to attach", i + 1);
 			}
 
 			break;
@@ -236,33 +219,30 @@ ramtron_attach(void)
 
 	/* if last attempt is still unsuccessful, abort */
 	if (mtd_dev == NULL) {
-		PX4_ERR("failed to initialize mtd driver");
-		return 1;
+		errx(1, "failed to initialize mtd driver");
 	}
 
 	int ret = mtd_dev->ioctl(mtd_dev, MTDIOC_SETSPEED, (unsigned long)10 * 1000 * 1000);
 
 	if (ret != OK) {
-		// FIXME: From the previous warning call, it looked like this should have been fatal error instead. Tried
-		// that but setting the bus speed does fail all the time. Which was then exiting and the board would
-		// not run correctly. So changed to PX4_WARN.
-		PX4_WARN("failed to set bus speed");
+		// FIXME: From the previous warnx call, it looked like this should have been an errx instead. Tried
+		// that but setting the bug speed does fail all the time. Which was then exiting and the board would
+		// not run correctly. So changed to warnx.
+		warnx("failed to set bus speed");
 	}
 
 	attached = true;
-	return 0;
 }
 #else
 
-static int
+static void
 at24xxx_attach(void)
 {
 	/* find the right I2C */
 	struct i2c_master_s *i2c = px4_i2cbus_initialize(PX4_I2C_BUS_MTD);
 
 	if (i2c == NULL) {
-		PX4_ERR("failed to locate I2C bus");
-		return 1;
+		errx(1, "failed to locate I2C bus");
 	}
 
 	/* start the MTD driver, attempt 5 times */
@@ -272,7 +252,7 @@ at24xxx_attach(void)
 		if (mtd_dev) {
 			/* abort on first valid result */
 			if (i > 0) {
-				PX4_WARN("EEPROM needed %d attempts to attach", i + 1);
+				warnx("warning: EEPROM needed %d attempts to attach", i + 1);
 			}
 
 			break;
@@ -281,40 +261,33 @@ at24xxx_attach(void)
 
 	/* if last attempt is still unsuccessful, abort */
 	if (mtd_dev == NULL) {
-		PX4_ERR("failed to initialize EEPROM driver");
-		return 1;
+		errx(1, "failed to initialize EEPROM driver");
 	}
 
 	attached = true;
-	return 0;
 }
 #endif
 
-static int
+static void
 mtd_start(char *partition_names[], unsigned n_partitions)
 {
 	int ret;
 
 	if (started) {
-		PX4_ERR("mtd already mounted");
-		return 1;
+		errx(1, "mtd already mounted");
 	}
 
 	if (!attached) {
 #ifdef CONFIG_MTD_RAMTRON
-		ret = ramtron_attach();
+		ramtron_attach();
 #else
-		ret = at24xxx_attach();
+		at24xxx_attach();
 #endif
-
-		if (ret != 0) {
-			return ret;
-		}
 	}
 
 	if (!mtd_dev) {
-		PX4_ERR("Failed to create RAMTRON FRAM MTD instance");
-		return 1;
+		warnx("ERROR: Failed to create RAMTRON FRAM MTD instance");
+		exit(1);
 	}
 
 	unsigned long blocksize, erasesize, neraseblocks;
@@ -323,7 +296,7 @@ mtd_start(char *partition_names[], unsigned n_partitions)
 	ret = mtd_get_geometry(&blocksize, &erasesize, &neraseblocks, &blkpererase, &nblocks, &partsize, n_partitions);
 
 	if (ret) {
-		return ret;
+		exit(3);
 	}
 
 	/* Now create MTD FLASH partitions */
@@ -341,9 +314,9 @@ mtd_start(char *partition_names[], unsigned n_partitions)
 		part[i] = mtd_partition(mtd_dev, offset, nblocks);
 
 		if (!part[i]) {
-			PX4_ERR("mtd_partition failed. offset=%lu nblocks=%lu",
-				(unsigned long)offset, (unsigned long)nblocks);
-			return 1;
+			warnx("ERROR: mtd_partition failed. offset=%lu nblocks=%lu",
+			      (unsigned long)offset, (unsigned long)nblocks);
+			exit(4);
 		}
 
 		/* Initialize to provide an FTL block driver on the MTD FLASH interface */
@@ -353,8 +326,8 @@ mtd_start(char *partition_names[], unsigned n_partitions)
 		ret = ftl_initialize(i, part[i]);
 
 		if (ret < 0) {
-			PX4_ERR("ftl_initialize %s failed: %d", blockname, ret);
-			return 1;
+			warnx("ERROR: ftl_initialize %s failed: %d", blockname, ret);
+			exit(5);
 		}
 
 		/* Now create a character device on the block device */
@@ -362,15 +335,15 @@ mtd_start(char *partition_names[], unsigned n_partitions)
 		ret = bchdev_register(blockname, partition_names[i], false);
 
 		if (ret < 0) {
-			PX4_ERR("bchdev_register %s failed: %d", partition_names[i], ret);
-			return 1;
+			warnx("ERROR: bchdev_register %s failed: %d", partition_names[i], ret);
+			exit(6);
 		}
 	}
 
 	n_partitions_current = n_partitions;
 
 	started = true;
-	return 0;
+	exit(0);
 }
 
 int mtd_get_geometry(unsigned long *blocksize, unsigned long *erasesize, unsigned long *neraseblocks,
@@ -383,7 +356,7 @@ int mtd_get_geometry(unsigned long *blocksize, unsigned long *erasesize, unsigne
 	int ret = mtd_dev->ioctl(mtd_dev, MTDIOC_GEOMETRY, (unsigned long)((uintptr_t)&geo));
 
 	if (ret < 0) {
-		PX4_ERR("mtd->ioctl failed: %d", ret);
+		warnx("ERROR: mtd->ioctl failed: %d", ret);
 		return ret;
 	}
 
@@ -415,17 +388,16 @@ static ssize_t mtd_get_partition_size(void)
 				   n_partitions_current);
 
 	if (ret != OK) {
-		PX4_ERR("Failed to get geometry");
-		return 0;
+		errx(1, "Failed to get geometry");
 	}
 
 	return partsize;
 }
 
-int mtd_print_info(void)
+void mtd_print_info(void)
 {
 	if (!attached) {
-		return 1;
+		exit(1);
 	}
 
 	unsigned long blocksize, erasesize, neraseblocks;
@@ -435,10 +407,10 @@ int mtd_print_info(void)
 				   n_partitions_current);
 
 	if (ret) {
-		return ret;
+		exit(3);
 	}
 
-	PX4_INFO("Flash Geometry:");
+	warnx("Flash Geometry:");
 
 	printf("  blocksize:      %lu\n", blocksize);
 	printf("  erasesize:      %lu\n", erasesize);
@@ -447,10 +419,16 @@ int mtd_print_info(void)
 	printf("  Partition size: %u Blocks (%u bytes)\n", nblocks, partsize);
 	printf("  TOTAL SIZE: %u KiB\n", neraseblocks * erasesize / 1024);
 
-	return 0;
 }
 
-int
+void
+mtd_test(void)
+{
+	warnx("This test routine does not test anything yet!");
+	exit(1);
+}
+
+void
 mtd_erase(char *partition_names[], unsigned n_partitions)
 {
 	uint8_t v[64];
@@ -462,8 +440,7 @@ mtd_erase(char *partition_names[], unsigned n_partitions)
 		int fd = open(partition_names[i], O_WRONLY);
 
 		if (fd == -1) {
-			PX4_ERR("Failed to open partition");
-			return 1;
+			errx(1, "Failed to open partition");
 		}
 
 		while (write(fd, v, sizeof(v)) == sizeof(v)) {
@@ -474,7 +451,7 @@ mtd_erase(char *partition_names[], unsigned n_partitions)
 		close(fd);
 	}
 
-	return 0;
+	exit(0);
 }
 
 /*
@@ -482,14 +459,10 @@ mtd_erase(char *partition_names[], unsigned n_partitions)
   responding on the bus. It relies on the driver returning an error on
   bad reads (the ramtron driver does return an error)
  */
-int
+void
 mtd_readtest(char *partition_names[], unsigned n_partitions)
 {
 	ssize_t expected_size = mtd_get_partition_size();
-
-	if (expected_size == 0) {
-		return 1;
-	}
 
 	uint8_t v[128];
 
@@ -499,8 +472,7 @@ mtd_readtest(char *partition_names[], unsigned n_partitions)
 		int fd = open(partition_names[i], O_RDONLY);
 
 		if (fd == -1) {
-			PX4_ERR("Failed to open partition");
-			return 1;
+			errx(1, "Failed to open partition");
 		}
 
 		while (read(fd, v, sizeof(v)) == sizeof(v)) {
@@ -508,15 +480,14 @@ mtd_readtest(char *partition_names[], unsigned n_partitions)
 		}
 
 		if (count != expected_size) {
-			PX4_ERR("Failed to read partition - got %u/%u bytes", count, expected_size);
-			return 1;
+			errx(1, "Failed to read partition - got %u/%u bytes", count, expected_size);
 		}
 
 		close(fd);
 	}
 
 	printf("readtest OK\n");
-	return 0;
+	exit(0);
 }
 
 /*
@@ -525,14 +496,10 @@ mtd_readtest(char *partition_names[], unsigned n_partitions)
   blocks and writes the data back, then reads it again, failing if the
   data isn't the same
  */
-int
+void
 mtd_rwtest(char *partition_names[], unsigned n_partitions)
 {
 	ssize_t expected_size = mtd_get_partition_size();
-
-	if (expected_size == 0) {
-		return 1;
-	}
 
 	uint8_t v[128], v2[128];
 
@@ -543,51 +510,44 @@ mtd_rwtest(char *partition_names[], unsigned n_partitions)
 		int fd = open(partition_names[i], O_RDWR);
 
 		if (fd == -1) {
-			PX4_ERR("Failed to open partition");
-			return 1;
+			errx(1, "Failed to open partition");
 		}
 
 		while (read(fd, v, sizeof(v)) == sizeof(v)) {
 			count += sizeof(v);
 
 			if (lseek(fd, offset, SEEK_SET) != offset) {
-				PX4_ERR("seek failed");
-				return 1;
+				errx(1, "seek failed");
 			}
 
 			if (write(fd, v, sizeof(v)) != sizeof(v)) {
-				PX4_ERR("write failed");
-				return 1;
+				errx(1, "write failed");
 			}
 
 			if (lseek(fd, offset, SEEK_SET) != offset) {
-				PX4_ERR("seek failed");
-				return 1;
+				errx(1, "seek failed");
 			}
 
 			if (read(fd, v2, sizeof(v2)) != sizeof(v2)) {
-				PX4_ERR("read failed");
-				return 1;
+				errx(1, "read failed");
 			}
 
 			if (memcmp(v, v2, sizeof(v2)) != 0) {
-				PX4_ERR("memcmp failed");
-				return 1;
+				errx(1, "memcmp failed");
 			}
 
 			offset += sizeof(v);
 		}
 
 		if (count != expected_size) {
-			PX4_ERR("Failed to read partition - got %u/%u bytes", count, expected_size);
-			return 1;
+			errx(1, "Failed to read partition - got %u/%u bytes", count, expected_size);
 		}
 
 		close(fd);
 	}
 
 	printf("rwtest OK\n");
-	return 0;
+	exit(0);
 }
 
 #endif

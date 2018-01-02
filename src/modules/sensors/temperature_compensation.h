@@ -40,8 +40,6 @@
  * @author Beat Küng <beat-kueng@gmx.net>
  */
 
-#pragma once
-
 #include <systemlib/param/param.h>
 #include <mathlib/mathlib.h>
 
@@ -118,7 +116,7 @@ private:
 
 	*/
 	struct SensorCalData1D {
-		int32_t ID;
+		int ID;
 		float x5;
 		float x4;
 		float x3;
@@ -162,7 +160,7 @@ private:
 
 	 */
 	struct SensorCalData3D {
-		int32_t ID;		/**< sensor device ID*/
+		int ID;			/**< sensor device ID*/
 		float x3[3];		/**< x^3 term of polynomial */
 		float x2[3];		/**< x^2 term of polynomial */
 		float x1[3];		/**< x^1 term of polynomial */
@@ -187,11 +185,11 @@ private:
 
 	// create a struct containing all thermal calibration parameters
 	struct Parameters {
-		int32_t gyro_tc_enable;
+		int gyro_tc_enable;
 		SensorCalData3D gyro_cal_data[GYRO_COUNT_MAX];
-		int32_t accel_tc_enable;
+		int accel_tc_enable;
 		SensorCalData3D accel_cal_data[ACCEL_COUNT_MAX];
-		int32_t baro_tc_enable;
+		int baro_tc_enable;
 		SensorCalData1D baro_cal_data[BARO_COUNT_MAX];
 	};
 

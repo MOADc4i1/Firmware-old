@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2014-2017 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2014 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,7 +36,6 @@
  * Mavlink messages stream implementation.
  *
  * @author Anton Babushkin <anton.babushkin@me.com>
- * @author Lorenz Meier <lorenz@px4.io>
  */
 
 #include <stdlib.h>
@@ -60,7 +59,7 @@ MavlinkStream::~MavlinkStream()
  * Set messages interval in ms
  */
 void
-MavlinkStream::set_interval(const int interval)
+MavlinkStream::set_interval(const unsigned int interval)
 {
 	_interval = interval;
 }
@@ -79,27 +78,21 @@ MavlinkStream::update(const hrt_abstime t)
 		// on the link scheduling
 		_last_sent = hrt_absolute_time();
 #ifndef __PX4_QURT
-		(void)send(t);
+		send(t);
 #endif
 		return 0;
 	}
 
-	// One of the previous iterations sent the update
-	// already before the deadline
-	if (_last_sent > t) {
-		return -1;
-	}
-
 	int64_t dt = t - _last_sent;
-	int interval = (_interval > 0) ? _interval : 0;
+	int interval = _interval;
 
 	if (!const_rate()) {
 		interval /= _mavlink->get_rate_mult();
 	}
 
-	// Send the message if it is due or
+	// send the message if it is due or
 	// if it will overrun the next scheduled send interval
-	// by 30% of the interval time. This helps to avoid
+	// by 40% of the interval time. This helps to avoid
 	// sending a scheduled message on average slower than
 	// scheduled. Doing this at 50% would risk sending
 	// the message too often as the loop runtime of the app
@@ -107,23 +100,17 @@ MavlinkStream::update(const hrt_abstime t)
 	// This method is not theoretically optimal but a suitable
 	// stopgap as it hits its deadlines well (0.5 Hz, 50 Hz and 250 Hz)
 
-	if (interval == 0 || (dt > (interval - (_mavlink->get_main_loop_delay() / 10) * 3))) {
+	if (dt > (interval - (_mavlink->get_main_loop_delay() / 10) * 4)) {
 		// interval expired, send message
-		bool sent = true;
 #ifndef __PX4_QURT
-		sent = send(t);
+		send(t);
 #endif
-
-		// If the interval is non-zero do not use the actual time but
+		// if the interval is non-zero do not use the actual time but
 		// increment at a fixed rate, so that processing delays do not
 		// distort the average rate
-		if (sent) {
-			_last_sent = (interval > 0) ? _last_sent + interval : t;
-			return 0;
+		_last_sent = (interval > 0) ? _last_sent + interval : t;
 
-		} else {
-			return -1;
-		}
+		return 0;
 	}
 
 	return -1;

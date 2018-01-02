@@ -52,7 +52,7 @@
 #include <debug.h>
 #include <errno.h>
 
-#include "platform/cxxinitialize.h"
+#include <nuttx/arch.h>
 #include <nuttx/board.h>
 
 #include <stm32.h>

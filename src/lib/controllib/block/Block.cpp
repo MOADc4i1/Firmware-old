@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2012-2017 PX4 Development Team. All rights reserved.
+ *   Copyright (C) 2012 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,20 +37,25 @@
  * Controller library code
  */
 
-#include "Block.hpp"
-#include "BlockParam.hpp"
-
-#include <cstring>
+#include <math.h>
+#include <string.h>
+#include <stdio.h>
 
 #include <uORB/Subscription.hpp>
 #include <uORB/Publication.hpp>
+
+#include "Block.hpp"
+#include "BlockParam.hpp"
 
 namespace control
 {
 
 Block::Block(SuperBlock *parent, const char *name) :
 	_name(name),
-	_parent(parent)
+	_parent(parent),
+	_dt(0),
+	_subscriptions(),
+	_params()
 {
 	if (getParent() != nullptr) {
 		getParent()->getChildren().add(this);
@@ -88,7 +93,7 @@ void Block::updateParams()
 		if (count++ > maxParamsPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
-			PX4_ERR("exceeded max params for block: %s", name);
+			printf("exceeded max params for block: %s\n", name);
 			break;
 		}
 
@@ -107,7 +112,7 @@ void Block::updateSubscriptions()
 		if (count++ > maxSubscriptionsPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
-			PX4_ERR("exceeded max subscriptions for block: %s", name);
+			printf("exceeded max subscriptions for block: %s\n", name);
 			break;
 		}
 
@@ -125,7 +130,7 @@ void Block::updatePublications()
 		if (count++ > maxPublicationsPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
-			PX4_ERR("exceeded max publications for block: %s", name);
+			printf("exceeded max publications for block: %s\n", name);
 			break;
 		}
 
@@ -144,7 +149,7 @@ void SuperBlock::setDt(float dt)
 		if (count++ > maxChildrenPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
-			PX4_ERR("exceeded max children for block: %s", name);
+			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
 
@@ -162,7 +167,7 @@ void SuperBlock::updateChildParams()
 		if (count++ > maxChildrenPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
-			PX4_ERR("exceeded max children for block: %s", name);
+			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
 
@@ -180,7 +185,7 @@ void SuperBlock::updateChildSubscriptions()
 		if (count++ > maxChildrenPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
-			PX4_ERR("exceeded max children for block: %s", name);
+			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
 
@@ -198,7 +203,7 @@ void SuperBlock::updateChildPublications()
 		if (count++ > maxChildrenPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
-			PX4_ERR("exceeded max children for block: %s", name);
+			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
 
@@ -206,6 +211,7 @@ void SuperBlock::updateChildPublications()
 		child = child->getSibling();
 	}
 }
+
 
 } // namespace control
 

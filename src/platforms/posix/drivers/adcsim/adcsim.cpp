@@ -42,6 +42,7 @@
 
 #include <px4_config.h>
 #include <px4_time.h>
+#include <px4_adc.h>
 #include <board_config.h>
 #include <drivers/device/device.h>
 
@@ -83,7 +84,7 @@ private:
 	perf_counter_t		_sample_perf;
 
 	unsigned		_channel_count;
-	px4_adc_msg_t	*_samples;		/**< sample buffer */
+	adc_msg_s		*_samples;		/**< sample buffer */
 
 	/** worker function */
 	virtual void		_measure();
@@ -106,6 +107,8 @@ ADCSIM::ADCSIM(uint32_t channels) :
 	_channel_count(0),
 	_samples(nullptr)
 {
+	//_debug_enabled = true;
+
 	/* always enable the temperature sensor */
 	channels |= 1 << 16;
 
@@ -116,7 +119,7 @@ ADCSIM::ADCSIM(uint32_t channels) :
 		}
 	}
 
-	_samples = new px4_adc_msg_t[_channel_count];
+	_samples = new adc_msg_s[_channel_count];
 
 	/* prefill the channel numbers in the sample array */
 	if (_samples != nullptr) {
@@ -142,7 +145,7 @@ ADCSIM::~ADCSIM()
 ssize_t
 ADCSIM::devRead(void *buffer, size_t len)
 {
-	const size_t maxsize = sizeof(px4_adc_msg_t) * _channel_count;
+	const size_t maxsize = sizeof(adc_msg_s) * _channel_count;
 
 	if (len > maxsize) {
 		len = maxsize;
@@ -201,7 +204,7 @@ test()
 	}
 
 	for (unsigned i = 0; i < 50; i++) {
-		px4_adc_msg_t data[PX4_MAX_ADC_CHANNELS];
+		adc_msg_s data[12];
 		ssize_t count = h.read(data, sizeof(data));
 
 		if (count < 0) {

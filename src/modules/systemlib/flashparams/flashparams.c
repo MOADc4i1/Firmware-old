@@ -44,7 +44,6 @@
 
 #include <px4_defines.h>
 #include <px4_posix.h>
-#include <px4_shutdown.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -159,12 +158,6 @@ out:
 
 		size_t buf_size = bson_encoder_buf_size(&encoder);
 
-		int shutdown_lock_ret = px4_shutdown_lock();
-
-		if (shutdown_lock_ret) {
-			PX4_ERR("px4_shutdown_lock() failed (%i)", shutdown_lock_ret);
-		}
-
 		/* Get a buffer from the flash driver with enough space */
 
 		uint8_t *buffer;
@@ -193,11 +186,6 @@ out:
 			free(enc_buff);
 			parameter_flashfs_free();
 		}
-
-		if (shutdown_lock_ret == 0) {
-			px4_shutdown_unlock();
-		}
-
 	}
 
 	return result;
@@ -243,8 +231,7 @@ param_import_callback(bson_decoder_t decoder, void *private, bson_node_t node)
 	switch (node->type) {
 	case BSON_INT32:
 		if (param_type(param) != PARAM_TYPE_INT32) {
-			PX4_WARN("unexpected type for %s", node->name);
-			result = 1; // just skip this entry
+			debug("unexpected type for '%s", node->name);
 			goto out;
 		}
 
@@ -254,8 +241,7 @@ param_import_callback(bson_decoder_t decoder, void *private, bson_node_t node)
 
 	case BSON_DOUBLE:
 		if (param_type(param) != PARAM_TYPE_FLOAT) {
-			PX4_WARN("unexpected type for %s", node->name);
-			result = 1; // just skip this entry
+			debug("unexpected type for '%s", node->name);
 			goto out;
 		}
 
@@ -265,14 +251,12 @@ param_import_callback(bson_decoder_t decoder, void *private, bson_node_t node)
 
 	case BSON_BINDATA:
 		if (node->subtype != BSON_BIN_BINARY) {
-			PX4_WARN("unexpected type for %s", node->name);
-			result = 1; // just skip this entry
+			debug("unexpected subtype for '%s", node->name);
 			goto out;
 		}
 
 		if (bson_decoder_data_pending(decoder) != param_size(param)) {
-			PX4_WARN("bad size for '%s'", node->name);
-			result = 1; // just skip this entry
+			debug("bad size for '%s'", node->name);
 			goto out;
 		}
 
@@ -356,6 +340,8 @@ int flash_param_save(void)
 {
 	return param_export_internal(false);
 }
+
+
 
 int flash_param_load(void)
 {

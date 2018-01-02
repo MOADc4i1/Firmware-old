@@ -33,31 +33,28 @@
 
 #pragma once
 
-#include "subscriber_handler.h"
-#include "status_display.h"
-
 #include <px4_workqueue.h>
-#include <px4_module.h>
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/vehicle_command_ack.h>
 
 extern "C" __EXPORT int send_event_main(int argc, char *argv[]);
 
-class SendEvent : public ModuleBase<SendEvent>
+class SendEvent
 {
 public:
 	SendEvent();
 
-	/**
-	 * Initialize class in the same context as the work queue. And start the background listener.
+	/** Initialize class in the same context as the work queue. And start the background listener.
+	 *
 	 * @return 0 if successful, <0 on error */
-	static int task_spawn(int argc, char *argv[]);
+	static int initialize();
 
-	/** @see ModuleBase */
-	static int custom_command(int argc, char *argv[]);
+	/** Stop background listener */
+	void stop();
 
-	/** @see ModuleBase */
-	static int print_usage(const char *reason = nullptr);
+	bool is_running() { return _task_is_running; }
+
+	void print_status();
 
 private:
 
@@ -81,8 +78,9 @@ private:
 	/** return an ACK to a vehicle_command */
 	void answer_command(const vehicle_command_s &cmd, unsigned result);
 
+	volatile bool _task_should_exit = false;
+	volatile bool _task_is_running = false;
 	static struct work_s _work;
-	events::SubscriberHandler _subscriber_handler;
-	status::StatusDisplay _status_display;
+	int _vehicle_command_sub = -1;
 	orb_advert_t _command_ack_pub = nullptr;
 };

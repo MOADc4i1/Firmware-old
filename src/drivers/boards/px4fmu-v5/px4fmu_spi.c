@@ -42,7 +42,6 @@
  ************************************************************************************/
 
 #include <px4_config.h>
-#include <px4_log.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -67,6 +66,20 @@
 
 /* Debug ********************************************************************/
 
+#ifdef CONFIG_CPP_HAVE_VARARGS
+#  ifdef CONFIG_DEBUG
+#    define message(...) syslog(__VA_ARGS__)
+#  else
+#    define message(...) printf(__VA_ARGS__)
+#  endif
+#else
+#  ifdef CONFIG_DEBUG
+#    define message syslog
+#  else
+#    define message printf
+#  endif
+#endif
+
 /* Define CS GPIO array */
 static const uint32_t spi1selects_gpio[] = PX4_SENSOR_BUS_CS_GPIO;
 static const uint32_t spi2selects_gpio[] = PX4_MEMORY_BUS_CS_GPIO;
@@ -75,10 +88,11 @@ static const uint32_t spi3selects_gpio[] = {FIXME};
 #error Need to define SPI3 Usage
 #endif
 static const uint32_t spi4selects_gpio[] = PX4_BARO_BUS_CS_GPIO;
-#ifdef CONFIG_STM32F7_SPI5
-static const uint32_t spi5selects_gpio[] = PX4_EXTERNAL1_BUS_CS_GPIO;
+#ifdef CONFIG_STM32F7_SPI3
+static const uint32_t spi5selects_gpio[] = {FIXME};;
+#error Need to define SPI5 Usage
 #endif
-static const uint32_t spi6selects_gpio[] = PX4_EXTERNAL2_BUS_CS_GPIO;
+static const uint32_t spi6selects_gpio[] = PX4_EXTERNAL_BUS_CS_GPIO;
 
 
 /************************************************************************************
@@ -96,23 +110,59 @@ static const uint32_t spi6selects_gpio[] = PX4_EXTERNAL2_BUS_CS_GPIO;
 __EXPORT void stm32_spiinitialize(void)
 {
 #ifdef CONFIG_STM32F7_SPI1
-	board_gpio_init(spi1selects_gpio, arraySize(spi1selects_gpio));
+
+	for (int cs = 0; cs < arraySize(spi1selects_gpio); cs++) {
+		if (spi1selects_gpio[cs] != 0) {
+			stm32_configgpio(spi1selects_gpio[cs]);
+		}
+	}
+
 #endif
 
 #ifdef CONFIG_STM32F7_SPI2
-	board_gpio_init(spi2selects_gpio, arraySize(spi2selects_gpio));
+
+	for (int cs = 0; cs < arraySize(spi2selects_gpio); cs++) {
+		if (spi2selects_gpio[cs] != 0) {
+			stm32_configgpio(spi2selects_gpio[cs]);
+		}
+	}
+
 #endif
 #ifdef CONFIG_STM32F7_SPI3
-	board_gpio_init(spi3selects_gpio, arraySize(spi3selects_gpio));
+
+	for (int cs = 0; cs < arraySize(spi3selects_gpio); cs++) {
+		if (spi3selects_gpio[cs] != 0) {
+			stm32_configgpio(spi3selects_gpio[cs]);
+		}
+	}
+
 #endif
 #ifdef CONFIG_STM32F7_SPI4
-	board_gpio_init(spi4selects_gpio, arraySize(spi4selects_gpio));
+
+	for (int cs = 0; cs < arraySize(spi4selects_gpio); cs++) {
+		if (spi4selects_gpio[cs] != 0) {
+			stm32_configgpio(spi4selects_gpio[cs]);
+		}
+	}
+
 #endif
 #ifdef CONFIG_STM32F7_SPI5
-	board_gpio_init(spi5selects_gpio, arraySize(spi5selects_gpio));
+
+	for (int cs = 0; cs < arraySize(spi5selects_gpio); cs++) {
+		if (spi5selects_gpio[cs] != 0) {
+			stm32_configgpio(spi5selects_gpio[cs]);
+		}
+	}
+
 #endif
 #ifdef CONFIG_STM32F7_SPI6
-	board_gpio_init(spi6selects_gpio, arraySize(spi6selects_gpio));
+
+	for (int cs = 0; cs < arraySize(spi6selects_gpio); cs++) {
+		if (spi6selects_gpio[cs] != 0) {
+			stm32_configgpio(spi6selects_gpio[cs]);
+		}
+	}
+
 #endif
 
 }
@@ -138,7 +188,7 @@ __EXPORT int stm32_spi_bus_initialize(void)
 	spi_sensors = stm32_spibus_initialize(PX4_SPI_BUS_SENSORS);
 
 	if (!spi_sensors) {
-		PX4_ERR("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_SENSORS);
+		message("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_SENSORS);
 		return -ENODEV;
 	}
 
@@ -157,7 +207,7 @@ __EXPORT int stm32_spi_bus_initialize(void)
 	spi_memory = stm32_spibus_initialize(PX4_SPI_BUS_MEMORY);
 
 	if (!spi_memory) {
-		PX4_ERR("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_MEMORY);
+		message("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_MEMORY);
 		return -ENODEV;
 	}
 
@@ -177,7 +227,7 @@ __EXPORT int stm32_spi_bus_initialize(void)
 	spi_baro = stm32_spibus_initialize(PX4_SPI_BUS_BARO);
 
 	if (!spi_baro) {
-		PX4_ERR("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_BARO);
+		message("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_BARO);
 		return -ENODEV;
 	}
 
@@ -192,12 +242,12 @@ __EXPORT int stm32_spi_bus_initialize(void)
 		SPI_SELECT(spi_baro, cs, false);
 	}
 
-	/* Get the SPI port for the PX4_SPI_EXTERNAL1 */
+	/* Get the SPI port for the PX4_SPI_EXTERNAL */
 
-	spi_ext = stm32_spibus_initialize(PX4_SPI_BUS_EXTERNAL1);
+	spi_ext = stm32_spibus_initialize(PX4_SPI_BUS_EXTERNAL);
 
 	if (!spi_ext) {
-		PX4_ERR("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_EXTERNAL1);
+		message("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_EXTERNAL);
 		return -ENODEV;
 	}
 
@@ -205,24 +255,7 @@ __EXPORT int stm32_spi_bus_initialize(void)
 	SPI_SETBITS(spi_ext, 8);
 	SPI_SETMODE(spi_ext, SPIDEV_MODE3);
 
-	for (int cs = PX4_EXTERNAL1_BUS_FIRST_CS; cs <= PX4_EXTERNAL1_BUS_LAST_CS; cs++) {
-		SPI_SELECT(spi_ext, cs, false);
-	}
-
-	/* Get the SPI port for the PX4_SPI_EXTERNAL2 */
-
-	spi_ext = stm32_spibus_initialize(PX4_SPI_BUS_EXTERNAL2);
-
-	if (!spi_ext) {
-		PX4_ERR("[boot] FAILED to initialize SPI port %d\n", PX4_SPI_BUS_EXTERNAL2);
-		return -ENODEV;
-	}
-
-	SPI_SETFREQUENCY(spi_ext, 8 * 1000 * 1000);
-	SPI_SETBITS(spi_ext, 8);
-	SPI_SETMODE(spi_ext, SPIDEV_MODE3);
-
-	for (int cs = PX4_EXTERNAL2_BUS_FIRST_CS; cs <= PX4_EXTERNAL2_BUS_LAST_CS; cs++) {
+	for (int cs = PX4_EXTERNAL_BUS_FIRST_CS; cs <= PX4_EXTERNAL_BUS_LAST_CS; cs++) {
 		SPI_SELECT(spi_ext, cs, false);
 	}
 
@@ -238,7 +271,7 @@ __EXPORT int stm32_spi_bus_initialize(void)
  *
  ************************************************************************************/
 
-__EXPORT void stm32_spi1select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
+__EXPORT void stm32_spi1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
@@ -247,7 +280,7 @@ __EXPORT void stm32_spi1select(FAR struct spi_dev_s *dev, uint32_t devid, bool s
 
 	/* Making sure the other peripherals are not selected */
 
-	for (size_t cs = 0; arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
+	for (int cs = 0;  arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
 		if (spi1selects_gpio[cs] != 0) {
 			stm32_gpiowrite(spi1selects_gpio[cs], 1);
 		}
@@ -260,7 +293,7 @@ __EXPORT void stm32_spi1select(FAR struct spi_dev_s *dev, uint32_t devid, bool s
 	}
 }
 
-__EXPORT uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, uint32_t devid)
+__EXPORT uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -274,13 +307,13 @@ __EXPORT uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, uint32_t devid)
  *
  ************************************************************************************/
 
-__EXPORT void stm32_spi2select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
+__EXPORT void stm32_spi2select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
 	int sel = (int) devid;
 
-	if (devid == SPIDEV_FLASH(0)) {
+	if (devid == SPIDEV_FLASH) {
 		sel = PX4_SPIDEV_MEMORY;
 	}
 
@@ -301,7 +334,7 @@ __EXPORT void stm32_spi2select(FAR struct spi_dev_s *dev, uint32_t devid, bool s
 	}
 }
 
-__EXPORT uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, uint32_t devid)
+__EXPORT uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -315,7 +348,7 @@ __EXPORT uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, uint32_t devid)
  ************************************************************************************/
 
 #ifdef CONFIG_STM32F7_SPI3
-__EXPORT void stm32_spi3select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
+__EXPORT void stm32_spi3select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
@@ -337,7 +370,7 @@ __EXPORT void stm32_spi3select(FAR struct spi_dev_s *dev, uint32_t devid, bool s
 	}
 }
 
-__EXPORT uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, uint32_t devid)
+__EXPORT uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -350,14 +383,14 @@ __EXPORT uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, uint32_t devid)
  *
  ************************************************************************************/
 
-__EXPORT void stm32_spi4select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
+__EXPORT void stm32_spi4select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
 	int sel = (int) devid;
 
 	ASSERT(PX4_SPI_BUS_ID(sel) == PX4_SPI_BUS_BARO);
 
 	/* Making sure the other peripherals are not selected */
-	for (size_t cs = 0; arraySize(spi4selects_gpio) > 1 && cs < arraySize(spi4selects_gpio); cs++) {
+	for (int cs = 0; arraySize(spi4selects_gpio) > 1 && cs < arraySize(spi4selects_gpio); cs++) {
 		stm32_gpiowrite(spi4selects_gpio[cs], 1);
 	}
 
@@ -368,7 +401,7 @@ __EXPORT void stm32_spi4select(FAR struct spi_dev_s *dev, uint32_t devid, bool s
 	}
 }
 
-__EXPORT uint8_t stm32_spi4status(FAR struct spi_dev_s *dev, uint32_t devid)
+__EXPORT uint8_t stm32_spi4status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -382,16 +415,16 @@ __EXPORT uint8_t stm32_spi4status(FAR struct spi_dev_s *dev, uint32_t devid)
  ************************************************************************************/
 
 #ifdef CONFIG_STM32F7_SPI5
-__EXPORT void stm32_spi5select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
+__EXPORT void stm32_spi5select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
 	int sel = (int) devid;
 
-	ASSERT(PX4_SPI_BUS_ID(sel) == PX4_SPI_BUS_EXTERNAL1);
+	ASSERT(PX4_SPI_BUS_ID(sel) == FIXME);
 
 	/* Making sure the other peripherals are not selected */
-	for (size_t cs = 0; arraySize(spi5selects_gpio) > 1 && cs < arraySize(spi5selects_gpio); cs++) {
+	for (int cs = 0; arraySize(spi5selects_gpio) > 1 && cs < arraySize(spi5selects_gpio); cs++) {
 		stm32_gpiowrite(spi5selects_gpio[cs], 1);
 	}
 
@@ -402,7 +435,7 @@ __EXPORT void stm32_spi5select(FAR struct spi_dev_s *dev, uint32_t devid, bool s
 	}
 }
 
-__EXPORT uint8_t stm32_spi5status(FAR struct spi_dev_s *dev, uint32_t devid)
+__EXPORT uint8_t stm32_spi5status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -416,16 +449,16 @@ __EXPORT uint8_t stm32_spi5status(FAR struct spi_dev_s *dev, uint32_t devid)
  *
  ************************************************************************************/
 
-__EXPORT void stm32_spi6select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
+__EXPORT void stm32_spi6select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
 	int sel = (int) devid;
 
-	ASSERT(PX4_SPI_BUS_ID(sel) == PX4_SPI_BUS_EXTERNAL2);
+	ASSERT(PX4_SPI_BUS_ID(sel) == PX4_SPI_BUS_EXTERNAL);
 
 	/* Making sure the other peripherals are not selected */
-	for (size_t cs = 0; arraySize(spi6selects_gpio) > 1 && cs < arraySize(spi6selects_gpio); cs++) {
+	for (int cs = 0; arraySize(spi6selects_gpio) > 1 && cs < arraySize(spi6selects_gpio); cs++) {
 		stm32_gpiowrite(spi6selects_gpio[cs], 1);
 	}
 
@@ -436,23 +469,15 @@ __EXPORT void stm32_spi6select(FAR struct spi_dev_s *dev, uint32_t devid, bool s
 	}
 }
 
-__EXPORT uint8_t stm32_spi6status(FAR struct spi_dev_s *dev, uint32_t devid)
+__EXPORT uint8_t stm32_spi6status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
 	return SPI_STATUS_PRESENT;
 }
 
-/************************************************************************************
- * Name: board_spi_reset
- *
- * Description:
- *
- *
- ************************************************************************************/
-
 __EXPORT void board_spi_reset(int ms)
 {
 	/* disable SPI bus */
-	for (size_t cs = 0;  arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
+	for (int cs = 0;  arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
 		if (spi1selects_gpio[cs] != 0) {
 			stm32_configgpio(_PIN_OFF(spi1selects_gpio[cs]));
 		}
@@ -464,12 +489,12 @@ __EXPORT void board_spi_reset(int ms)
 
 
 #if BOARD_USE_DRDY
-	stm32_configgpio(GPIO_DRDY_OFF_SPI1_DRDY1_ICM20689);
-	stm32_configgpio(GPIO_DRDY_OFF_SPI1_DRDY2_BMI055_GYRO);
-	stm32_configgpio(GPIO_DRDY_OFF_SPI1_DRDY3_BMI055_ACC);
-	stm32_configgpio(GPIO_DRDY_OFF_SPI1_DRDY4_ICM20602);
-	stm32_configgpio(GPIO_DRDY_OFF_SPI1_DRDY5_BMI055_GYRO);
-	stm32_configgpio(GPIO_DRDY_OFF_SPI1_DRDY6_BMI055_ACC);
+	stm32_configgpio(GPIO_DRDY_OFF_ICM20689_DRDY1);
+	stm32_configgpio(GPIO_DRDY_OFF_BMI055_DRDY2_GYRO);
+	stm32_configgpio(GPIO_DRDY_OFF_BMI055_DRDY3_ACC);
+	stm32_configgpio(GPIO_DRDY_OFF_ICM20602_DRDY4);
+	stm32_configgpio(GPIO_DRDY_OFF_BMI055_DRDY5_GYRO);
+	stm32_configgpio(GPIO_DRDY_OFF_BMI055_DRDY6_ACC);
 #endif
 	/* set the sensor rail off */
 	stm32_gpiowrite(GPIO_VDD_3V3_SENSORS_EN, 0);
@@ -487,7 +512,7 @@ __EXPORT void board_spi_reset(int ms)
 	usleep(100);
 
 	/* reconfigure the SPI pins */
-	for (size_t cs = 0; arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
+	for (int cs = 0;  arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
 		if (spi1selects_gpio[cs] != 0) {
 			stm32_configgpio(spi1selects_gpio[cs]);
 		}
@@ -498,12 +523,12 @@ __EXPORT void board_spi_reset(int ms)
 	stm32_configgpio(GPIO_SPI1_MOSI);
 
 #if BOARD_USE_DRDY
-	stm32_configgpio(GPIO_SPI1_DRDY1_ICM20689);
-	stm32_configgpio(GPIO_SPI1_DRDY2_BMI055_GYRO);
-	stm32_configgpio(GPIO_SPI1_DRDY3_BMI055_ACC);
-	stm32_configgpio(GPIO_SPI1_DRDY4_ICM20602);
-	stm32_configgpio(GPIO_SPI1_DRDY5_BMI055_GYRO);
-	stm32_configgpio(GPIO_SPI1_DRDY6_BMI055_ACC);
+	stm32_configgpio(GPIO_ICM20689_DRDY1);
+	stm32_configgpio(GPIO_BMI055_DRDY2_GYRO);
+	stm32_configgpio(GPIO_BMI055_DRDY3_ACC);
+	stm32_configgpio(GPIO_ICM20602_DRDY4);
+	stm32_configgpio(GPIO_BMI055_DRDY5_GYRO);
+	stm32_configgpio(GPIO_BMI055_DRDY6_ACC);
 #endif
 
 }
