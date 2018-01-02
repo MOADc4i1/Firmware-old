@@ -85,13 +85,13 @@ deploy:
     on:
       tags: true
       all_branches: true
-      repo: MOADc4i1/Firmware
+      repo: MOADc4i1/Firmware-old
       condition: $BUILD_TARGET = qgc_firmware
 
 addons:
   coverity_scan:
     project:
-      name: MOADc4i1/Firmware
+      name: MOADc4i1/Firmware-old
  #   notification_email: ci@px4.io
     build_command: make posix_sitl_default
     branch_pattern: coverity
