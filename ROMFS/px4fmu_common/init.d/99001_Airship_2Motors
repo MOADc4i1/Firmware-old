@@ -3,7 +3,6 @@
 # @name Airship 2 Motors
 #
 # @type Airship
-# @class Airship
 #
 # @output MAIN1 Left Motor
 # @output MAIN2 Right Motor
