@@ -1,0 +1,29 @@
+#!nsh
+#
+# @name Airship 2 Motors
+#
+# @type Airship
+# @class Airship
+#
+# @output MAIN1 Left Motor
+# @output MAIN2 Right Motor
+#
+# @output AUX1 feed-through of RC AUX1 channel (ServoL)
+# @output AUX2 feed-through of RC AUX2 channel (ServoR)
+#
+# @maintainer Aeronautical/Aerospace Development Centre, Singapore Polytechnic
+#
+
+sh /etc/init.d/rc.fw_defaults
+
+set MIXER Airship_Two_Motor
+
+set PWM_RATE 400
+set MIXER_AUX pass
+
+set PWM_AUX_RATE 50
+set PWM_AUX_OUT 1234
+
+# rate must be set by group (see pwm info)
+# throttle is in the same group as servos
+# For testing only
