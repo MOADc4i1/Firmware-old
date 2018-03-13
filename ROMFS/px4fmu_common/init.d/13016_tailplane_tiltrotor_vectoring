@@ -2,6 +2,7 @@
 #
 # @name Twinrock Tricopter with Vectoring
 # @type VTOL Tiltrotor
+# @class VTOL
 # @maintainer Aeronautical/Aerospace Development Centre, Singapore Polytechnic
 # @output MAIN1 Motor right
 # @output MAIN2 Motor left
